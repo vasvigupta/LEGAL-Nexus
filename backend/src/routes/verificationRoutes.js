@@ -1,9 +1,13 @@
 const express = require('express');
 const { body } = require('express-validator');
 const {
-  submitVerificationRequest,
+  submitOcrVerification,
+  getMyVerificationStatus,
   listVerificationRequests,
   reviewVerificationRequest,
+  blockUserAccount,
+  unblockUserAccount,
+  getAdminVerificationStats,
 } = require('../controllers/verificationController');
 const { authenticateJWT } = require('../middleware/auth');
 const { authorizeRoles } = require('../middleware/rbac');
@@ -15,16 +19,25 @@ const router = express.Router();
 
 router.use(authenticateJWT);
 
-// Professional submits verification
+// Professional submits Bar ID / Document OCR verification
 router.post(
-  '/request',
-  authorizeRoles(...PROFESSIONAL_ROLES),
-  [
-    body('fullName').notEmpty().withMessage('Full name is required'),
-    validate,
-  ],
-  auditLogMiddleware('VERIFICATION_SUBMITTED', 'VERIFICATION'),
-  submitVerificationRequest
+  '/ocr-submit',
+  authorizeRoles(...PROFESSIONAL_ROLES, ROLES.CITIZEN, ROLES.ADMIN),
+  auditLogMiddleware('VERIFICATION_OCR_SUBMITTED', 'VERIFICATION'),
+  submitOcrVerification
+);
+
+// Professional gets their own live verification status
+router.get(
+  '/my-status',
+  getMyVerificationStatus
+);
+
+// Admin stats
+router.get(
+  '/stats',
+  authorizeRoles(ROLES.ADMIN),
+  getAdminVerificationStats
 );
 
 // Admin list verification requests
@@ -44,6 +57,22 @@ router.patch(
   ],
   auditLogMiddleware('VERIFICATION_REVIEWED', 'VERIFICATION'),
   reviewVerificationRequest
+);
+
+// Admin Block user / profile
+router.post(
+  '/block/:userId',
+  authorizeRoles(ROLES.ADMIN),
+  auditLogMiddleware('USER_BLOCKED', 'SECURITY'),
+  blockUserAccount
+);
+
+// Admin Unblock user / profile
+router.post(
+  '/unblock/:userId',
+  authorizeRoles(ROLES.ADMIN),
+  auditLogMiddleware('USER_UNBLOCKED', 'SECURITY'),
+  unblockUserAccount
 );
 
 module.exports = router;

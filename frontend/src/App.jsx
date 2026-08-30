@@ -15,6 +15,7 @@ import LegalDraftGenerator from './components/LegalDraftGenerator';
 import DocumentIntelligenceModal from './components/DocumentIntelligenceModal';
 import UserProfile from './components/UserProfile';
 import SettingsView from './components/SettingsView';
+import AdminDashboard from './components/AdminDashboard';
 import {
   LayoutDashboard,
   Bot,
@@ -33,8 +34,38 @@ import {
 } from 'lucide-react';
 import api from './services/api';
 
+const VALID_TABS = [
+  'landing',
+  'login',
+  'signup',
+  'cases',
+  'intake',
+  'documents',
+  'drafts',
+  'research',
+  'lawyers',
+  'admin',
+  'profile',
+  'settings',
+  'system',
+];
+
+const getInitialTab = () => {
+  if (typeof window !== 'undefined') {
+    const hash = window.location.hash.replace('#', '').trim();
+    if (hash && VALID_TABS.includes(hash)) {
+      return hash;
+    }
+    const saved = localStorage.getItem('nyaya_active_tab');
+    if (saved && VALID_TABS.includes(saved)) {
+      return saved;
+    }
+  }
+  return 'landing';
+};
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState('landing'); // landing | login | signup | cases | intake | documents | drafts | research | lawyers | profile | settings | system
+  const [activeTab, setActiveTabState] = useState(getInitialTab);
   const [user, setUser] = useState(null);
   const [isNewCaseOpen, setIsNewCaseOpen] = useState(false);
   const [selectedCase, setSelectedCase] = useState(null);
@@ -43,6 +74,50 @@ export default function App() {
   const [healthStatus, setHealthStatus] = useState(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Custom tab setter with Browser History & Hash Synchronization
+  const setActiveTab = (tab, pushHistory = true) => {
+    if (!VALID_TABS.includes(tab)) return;
+    setActiveTabState(tab);
+    localStorage.setItem('nyaya_active_tab', tab);
+
+    if (typeof window !== 'undefined') {
+      const currentHash = window.location.hash.replace('#', '').trim();
+      if (pushHistory) {
+        if (currentHash !== tab) {
+          window.history.pushState({ tab }, '', '#' + tab);
+        }
+      } else {
+        window.history.replaceState({ tab }, '', '#' + tab);
+      }
+    }
+  };
+
+  // Listen to Browser Back / Forward Button Navigation
+  useEffect(() => {
+    const handlePopState = (e) => {
+      const hash = window.location.hash.replace('#', '').trim();
+      const targetTab = e.state?.tab || hash || 'landing';
+      if (VALID_TABS.includes(targetTab)) {
+        setActiveTabState(targetTab);
+        localStorage.setItem('nyaya_active_tab', targetTab);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('hashchange', handlePopState);
+
+    // Initial hash sync if present
+    const initTab = getInitialTab();
+    if (window.location.hash !== '#' + initTab) {
+      window.history.replaceState({ tab: initTab }, '', '#' + initTab);
+    }
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('hashchange', handlePopState);
+    };
+  }, []);
 
   useEffect(() => {
     checkCurrentUser();
@@ -60,9 +135,19 @@ export default function App() {
     if (!token) return;
     try {
       const res = await api.get('/auth/me');
-      setUser(res.data.data.user);
-      if (activeTab === 'landing' || activeTab === 'login' || activeTab === 'signup') {
-        setActiveTab('cases');
+      const authUser = res.data.data.user;
+      setUser(authUser);
+      
+      // Preserve current tab on reload!
+      const currentTab = getInitialTab();
+      if (currentTab === 'login' || currentTab === 'signup') {
+        if (authUser.role === 'ADMIN') {
+          setActiveTab('admin', false);
+        } else {
+          setActiveTab('cases', false);
+        }
+      } else {
+        setActiveTab(currentTab, false);
       }
     } catch {
       localStorage.removeItem('nyaya_access_token');
@@ -102,7 +187,14 @@ export default function App() {
   const handleAuthSuccess = (authUser) => {
     setUser(authUser);
     loadCases();
-    setActiveTab('cases');
+    const currentTab = getInitialTab();
+    if (currentTab && currentTab !== 'login' && currentTab !== 'signup' && currentTab !== 'landing') {
+      setActiveTab(currentTab);
+    } else if (authUser?.role === 'ADMIN') {
+      setActiveTab('admin');
+    } else {
+      setActiveTab('cases');
+    }
   };
 
   const handleCaseCreated = (newCase) => {
@@ -162,19 +254,23 @@ export default function App() {
         {/* Mobile Navigation Drawer */}
         {isMobileMenuOpen && !isPublicView && user && (
           <div className="md:hidden bg-[#0B1F33] text-white border-b border-slate-800 px-4 py-4 space-y-1.5 absolute w-full left-0 top-0 z-40 shadow-2xl animate-in fade-in duration-200">
-            {[
-              { id: 'cases', label: 'Case Management', icon: LayoutDashboard },
-              { id: 'intake', label: 'AI Legal Assistant', icon: Bot },
-              { id: 'documents', label: 'Document Intelligence', icon: FileText },
-              { id: 'drafts', label: 'Smart Legal Drafting', icon: PenTool },
-              { id: 'research', label: 'Statutory Research', icon: BookOpen },
-              { id: 'lawyers', label: 'Advocate Directory', icon: UserCheck },
-              { id: 'profile', label: 'Profile & Network', icon: Users, requireAuth: true },
-              { id: 'settings', label: 'Platform Settings', icon: Settings },
-              { id: 'system', label: 'System Status', icon: Activity, requireRole: ['LAWYER', 'ADMIN', 'LAW_STUDENT'] },
-            ].map((item) => {
-              if (item.requireAuth && !user) return null;
-              if (item.requireRole && (!user || !item.requireRole.includes(user.role))) return null;
+            {(user?.role === 'ADMIN'
+              ? [
+                  { id: 'admin', label: 'Admin Portal', icon: ShieldCheck },
+                  { id: 'profile', label: 'Profile', icon: Users },
+                  { id: 'settings', label: 'Platform Settings', icon: Settings },
+                ]
+              : [
+                  { id: 'cases', label: 'Case Management', icon: LayoutDashboard },
+                  { id: 'intake', label: 'AI Legal Assistant', icon: Bot },
+                  { id: 'documents', label: 'Document Intelligence', icon: FileText },
+                  { id: 'drafts', label: 'Smart Legal Drafting', icon: PenTool },
+                  { id: 'research', label: 'Statutory Research', icon: BookOpen },
+                  { id: 'lawyers', label: 'Advocate Directory', icon: UserCheck },
+                  { id: 'profile', label: 'Profile & Network', icon: Users, requireAuth: true },
+                  { id: 'settings', label: 'Platform Settings', icon: Settings },
+                ]
+            ).map((item) => {
               const Icon = item.icon;
               const active = activeTab === item.id;
               return (
@@ -275,6 +371,14 @@ export default function App() {
           {activeTab === 'lawyers' && (
             user ? (
               <LawyerDirectory user={user} onOpenAuth={() => setActiveTab('login')} />
+            ) : (
+              <LoginPage onAuthSuccess={handleAuthSuccess} onNavigateToSignup={() => setActiveTab('signup')} />
+            )
+          )}
+
+          {activeTab === 'admin' && (
+            user ? (
+              <AdminDashboard user={user} />
             ) : (
               <LoginPage onAuthSuccess={handleAuthSuccess} onNavigateToSignup={() => setActiveTab('signup')} />
             )

@@ -26,14 +26,14 @@ import { jsPDF } from 'jspdf';
 import api from '../services/api';
 
 export default function LegalDraftGenerator({ user, onOpenAuth }) {
-  const [draftType, setDraftType] = useState('STATUTORY_LEGAL_NOTICE');
+  const [draftType, setDraftType] = useState('');
   const [formData, setFormData] = useState({
     plaintiffName: user?.profileData?.fullName || '',
     defendantName: '',
     defendantOrg: '',
-    disputedAmount: '150000',
-    jurisdiction: 'Delhi',
-    issue: 'Unpaid Salary for 3 Months despite written requests',
+    disputedAmount: '',
+    jurisdiction: '',
+    issue: '',
     category: 'Employment & Labour Law',
   });
   const [loading, setLoading] = useState(false);
@@ -97,6 +97,11 @@ export default function LegalDraftGenerator({ user, onOpenAuth }) {
     e.preventDefault();
     if (!user) {
       onOpenAuth();
+      return;
+    }
+
+    if (!draftType) {
+      alert('Please select a Legal Document Template to proceed.');
       return;
     }
 
@@ -324,10 +329,16 @@ export default function LegalDraftGenerator({ user, onOpenAuth }) {
               <select
                 value={draftType}
                 onChange={(e) => setDraftType(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 focus:ring-2 focus:ring-legal-blue focus:outline-none font-medium"
+                className={`w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-legal-blue focus:outline-none font-medium ${
+                  !draftType ? 'text-slate-400' : 'text-slate-800'
+                }`}
+                required
               >
+                <option value="" disabled>
+                  e.g. 15-Day Statutory Legal Demand Notice / Consumer Petition
+                </option>
                 {draftOptions.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
+                  <option key={opt.id} value={opt.id} className="text-slate-800">
                     {opt.icon} {opt.title} ({opt.category})
                   </option>
                 ))}
@@ -377,7 +388,7 @@ export default function LegalDraftGenerator({ user, onOpenAuth }) {
                     type="number"
                     value={formData.disputedAmount}
                     onChange={(e) => setFormData({ ...formData, disputedAmount: e.target.value })}
-                    placeholder="150000"
+                    placeholder="e.g. 150000"
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-legal-blue focus:outline-none font-mono"
                   />
                 </div>
@@ -389,7 +400,7 @@ export default function LegalDraftGenerator({ user, onOpenAuth }) {
                     type="text"
                     value={formData.jurisdiction}
                     onChange={(e) => setFormData({ ...formData, jurisdiction: e.target.value })}
-                    placeholder="Delhi"
+                    placeholder="e.g. Delhi / Bengaluru"
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-legal-blue focus:outline-none"
                   />
                 </div>
@@ -403,7 +414,7 @@ export default function LegalDraftGenerator({ user, onOpenAuth }) {
                   rows={3}
                   value={formData.issue}
                   onChange={(e) => setFormData({ ...formData, issue: e.target.value })}
-                  placeholder="e.g. Unpaid salary for 3 months despite written requests and reminders"
+                  placeholder="e.g. Unpaid salary for 3 months despite written requests and statutory reminders"
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-legal-blue focus:outline-none resize-none leading-relaxed"
                 />
               </div>

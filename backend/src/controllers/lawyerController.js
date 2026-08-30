@@ -1,5 +1,5 @@
 const http = require('http');
-const { ProfessionalProfile, User, CaseStudy, Case } = require('../models');
+const { ProfessionalProfile, User, CaseStudy, Case, ConsultationRequest } = require('../models');
 const { sendSuccess, sendError } = require('../utils/apiResponse');
 const { ROLES } = require('../config/roles');
 
@@ -47,80 +47,196 @@ const forwardToAiEngine = (path, method = 'GET', payload = null) => {
  * POST /api/lawyers/match
  * Multi-factor Lawyer Matching Engine for a Case
  */
+/**
+ * POST /api/lawyers/match
+ * Multi-factor Lawyer Matching Engine for a Case or Uploaded Document
+ */
 const matchLawyersForCase = async (req, res, next) => {
   try {
-    const { caseId, practiceArea, location, language, budget } = req.body;
-    let caseProfile = {
-      category: practiceArea || 'Employment & Labour Law',
-      issue: 'Legal Grievance',
-      jurisdiction: location || 'Delhi',
+    const { caseId, practiceArea, location, language, budget, documentText, documentName } = req.body;
+
+    let targetCategory = practiceArea || 'Employment & Labour Law';
+    let targetJurisdiction = location || 'Delhi';
+    let targetTitle = 'Custom Legal Inquiry';
+
+    // 1. If Case ID is supplied, extract details from database
+    if (caseId) {
+      const caseDoc = await Case.findById(caseId);
+      if (caseDoc) {
+        targetCategory = caseDoc.category || targetCategory;
+        targetJurisdiction = caseDoc.location?.city || targetJurisdiction;
+        targetTitle = caseDoc.title || caseDoc.issue || 'Filed Case';
+      }
+    }
+
+    // 2. If Case Document / PDF text is provided, perform AI classification
+    if (documentText || documentName) {
+      const textToAnalyze = `${documentName || ''} ${documentText || ''}`.toLowerCase();
+      targetTitle = documentName ? `Document: ${documentName}` : 'Uploaded Legal PDF';
+
+      if (textToAnalyze.includes('wage') || textToAnalyze.includes('salary') || textToAnalyze.includes('employment') || textToAnalyze.includes('labour') || textToAnalyze.includes('severance') || textToAnalyze.includes('termination') || textToAnalyze.includes('industrial disputes')) {
+        targetCategory = 'Employment & Labour Law';
+      } else if (textToAnalyze.includes('cyber') || textToAnalyze.includes('it act') || textToAnalyze.includes('upi') || textToAnalyze.includes('hacked') || textToAnalyze.includes('phishing') || textToAnalyze.includes('unauthorized transaction')) {
+        targetCategory = 'Cyber Law & Data Privacy';
+      } else if (textToAnalyze.includes('consumer') || textToAnalyze.includes('defect') || textToAnalyze.includes('e-daakhil') || textToAnalyze.includes('deficiency') || textToAnalyze.includes('warranty') || textToAnalyze.includes('refund')) {
+        targetCategory = 'Consumer Dispute';
+      } else if (textToAnalyze.includes('tenant') || textToAnalyze.includes('rent') || textToAnalyze.includes('eviction') || textToAnalyze.includes('property') || textToAnalyze.includes('land') || textToAnalyze.includes('trespass')) {
+        targetCategory = 'Property & Real Estate';
+      } else if (textToAnalyze.includes('cheque') || textToAnalyze.includes('section 138') || textToAnalyze.includes('promissory') || textToAnalyze.includes('loan') || textToAnalyze.includes('recovery')) {
+        targetCategory = 'Banking & Financial Dispute';
+      } else if (textToAnalyze.includes('divorce') || textToAnalyze.includes('matrimonial') || textToAnalyze.includes('maintenance') || textToAnalyze.includes('custody')) {
+        targetCategory = 'Family & Matrimonial';
+      } else if (textToAnalyze.includes('fir') || textToAnalyze.includes('bail') || textToAnalyze.includes('ipc') || textToAnalyze.includes('bns') || textToAnalyze.includes('criminal')) {
+        targetCategory = 'Criminal Law';
+      }
+
+      // City detection in document
+      const cities = ['Delhi', 'Bengaluru', 'Mumbai', 'Chennai', 'Kolkata', 'Chandigarh', 'Hyderabad', 'Pune', 'Jaipur', 'Lucknow'];
+      for (const c of cities) {
+        if (textToAnalyze.includes(c.toLowerCase())) {
+          targetJurisdiction = c;
+          break;
+        }
+      }
+    }
+
+    const caseProfile = {
+      title: targetTitle,
+      category: targetCategory,
+      jurisdiction: targetJurisdiction,
       language: language || 'English',
       financialDetails: { disputedAmount: budget || 100000 },
     };
 
-    if (caseId) {
-      const caseDoc = await Case.findById(caseId);
-      if (caseDoc) {
-        caseProfile = {
-          category: caseDoc.category,
-          issue: caseDoc.issue || caseDoc.title,
-          jurisdiction: caseDoc.location?.city || 'Delhi',
-          language: 'English',
-          financialDetails: { disputedAmount: caseDoc.financialDetails?.disputedAmount || 0 },
-        };
-      }
-    }
+    // 3. Fetch only active, unblocked practicing advocates & their published case studies
+    const [profiles, allCaseStudies] = await Promise.all([
+      ProfessionalProfile.find({
+        professionalRole: ROLES.LAWYER,
+        isBlocked: { $ne: true },
+      }).populate('user', 'email role isVerified createdAt'),
+      CaseStudy.find({}),
+    ]);
 
-    // Fetch all active verified & candidate lawyers
-    const profiles = await ProfessionalProfile.find({
-      professionalRole: { $in: [ROLES.LAWYER, ROLES.LAW_STUDENT] },
-    }).populate('user', 'email role isVerified createdAt');
+    // 4. Calculate Multi-Factor Transparent Match Scores
+    const rankedLawyers = profiles.map((p) => {
+      const advocateAreas = (p.practiceAreas || []).map((a) => a.toLowerCase());
+      const targetCatLower = targetCategory.toLowerCase();
 
-    const candidateList = profiles.map((p) => ({
-      id: p._id,
-      fullName: p.fullName || p.user?.email,
-      practiceAreas: p.practiceAreas || [],
-      experienceYears: p.experienceYears || 1,
-      location: p.location || { city: 'Delhi', state: 'Delhi' },
-      languages: p.languages || ['English', 'Hindi'],
-      proBonoAvailable: p.proBonoAvailable !== false,
-      isAvailable: p.isAvailable !== false,
-      verificationStatus: p.verificationStatus,
-      isVerified: p.verificationStatus === 'VERIFIED',
-    }));
+      // Factor 1: Subject-Matter Practice Area Specialization (Max 40 Pts)
+      const exactCategoryMatch = advocateAreas.some((a) => a.includes(targetCatLower) || targetCatLower.includes(a));
+      const partialCategoryMatch = advocateAreas.some((a) => a.includes(targetCatLower.split(' ')[0]) || a.includes('civil') || a.includes('general'));
+      const practiceAreaPoints = exactCategoryMatch ? 40 : partialCategoryMatch ? 15 : 0;
 
-    try {
-      const aiRes = await forwardToAiEngine('/ai/lawyer/match', 'POST', {
-        lawyers: candidateList,
-        caseProfile,
+      // Factor 2: Published Precedent Case Studies in this Exact Category (Max 25 Pts)
+      const matchingCaseStudies = allCaseStudies.filter((cs) => {
+        const isAdvocate = cs.professional?.toString() === p.user?._id?.toString() || cs.professional?.toString() === p.user?.toString();
+        const csPracticeLower = (cs.practiceArea || '').toLowerCase();
+        const isCat = csPracticeLower.includes(targetCatLower) || targetCatLower.includes(csPracticeLower);
+        return isAdvocate && isCat;
       });
+      const hasPublishedCaseStudy = matchingCaseStudies.length > 0;
+      const caseStudyPoints = hasPublishedCaseStudy ? 25 : 0;
+      const featuredCaseStudy = matchingCaseStudies[0] || null;
 
-      return res.status(aiRes.statusCode).json({
-        success: aiRes.statusCode === 200,
-        data: aiRes.body,
-      });
-    } catch (aiErr) {
-      // Fallback matching logic
-      const matched = candidateList.map((c) => ({
-        lawyerId: c.id,
-        fullName: c.fullName,
-        matchScore: 90,
-        matchPercentage: 90,
-        isVerified: c.isVerified,
-        practiceAreas: c.practiceAreas,
-        experienceYears: c.experienceYears,
+      // Factor 3: Years of Bar Experience & Seniority in Category (Max 20 Pts)
+      const expYears = p.experienceYears || 1;
+      let expPoints = 8;
+      if (expYears >= 15) expPoints = 20;
+      else if (expYears >= 10) expPoints = 16;
+      else if (expYears >= 5) expPoints = 12;
+
+      // Factor 4: Judicial Forum / Court Jurisdiction Match (Max 15 Pts)
+      const advocateCity = (p.location?.city || '').toLowerCase();
+      const targetCity = targetJurisdiction.toLowerCase();
+      const courts = (p.location?.primaryCourts || []).join(' ').toLowerCase();
+      const locationPoints = advocateCity === targetCity || courts.includes(targetCity) || courts.includes('supreme court') ? 15 : 7;
+
+      // Factor 5: Bar Council Verification Seal (Max 10 Pts)
+      const isVerified = p.verificationStatus === 'VERIFIED' || p.barCouncilRegistration?.isVerified === true;
+      const verificationPoints = isVerified ? 10 : 0;
+
+      const totalScore = practiceAreaPoints + caseStudyPoints + expPoints + locationPoints + verificationPoints;
+      // Normalized percentage out of 110 max points
+      const matchPercentage = Math.min(Math.round((totalScore / 110) * 100), 99);
+      const isHighlyRecommended = exactCategoryMatch && matchPercentage >= 70;
+
+      return {
+        lawyerId: p._id,
+        fullName: p.fullName || p.user?.email,
+        title: p.title || 'Advocate at High Court',
+        bio: p.bio,
+        practiceAreas: p.practiceAreas || [],
+        experienceYears: expYears,
+        location: p.location || { city: 'Delhi', state: 'Delhi' },
+        barCouncilRegistration: p.barCouncilRegistration,
+        feeRange: p.feeRange,
+        isVerified,
+        matchScore: totalScore,
+        matchPercentage,
+        isHighlyRecommended,
+        publishedCaseStudiesCount: matchingCaseStudies.length,
+        featuredCaseStudy: featuredCaseStudy
+          ? {
+              title: featuredCaseStudy.title,
+              forum: featuredCaseStudy.forum,
+              outcome: featuredCaseStudy.outcome,
+              year: featuredCaseStudy.year,
+            }
+          : null,
         explanationBreakdown: [
-          { factor: 'Practice Area', points: 30, maxPoints: 30, label: 'Practice area match', matched: true },
-          { factor: 'Experience', points: 25, maxPoints: 25, label: `${c.experienceYears} years experience`, matched: true },
-          { factor: 'Location', points: 15, maxPoints: 15, label: 'Court jurisdiction match', matched: true },
-          { factor: 'Language', points: 10, maxPoints: 10, label: 'Hindi + English', matched: true },
-          { factor: 'Budget', points: 10, maxPoints: 10, label: 'Within budget fit', matched: true },
+          {
+            factor: 'Practice Area Alignment',
+            points: practiceAreaPoints,
+            maxPoints: 40,
+            label: exactCategoryMatch ? `Primary Specialist in ${targetCategory}` : partialCategoryMatch ? `Allied Practice in ${p.practiceAreas?.[0] || 'Civil Law'}` : 'Different Primary Field',
+            matched: exactCategoryMatch,
+          },
+          {
+            factor: 'Published Precedent Case Studies',
+            points: caseStudyPoints,
+            maxPoints: 25,
+            label: hasPublishedCaseStudy ? `🏆 "${featuredCaseStudy.title.substring(0, 40)}..." published` : 'No published case studies in this exact domain',
+            matched: hasPublishedCaseStudy,
+          },
+          {
+            factor: 'Experience & Seniority',
+            points: expPoints,
+            maxPoints: 20,
+            label: `${expYears}+ Years Active Practice at Bar`,
+            matched: expYears >= 5,
+          },
+          {
+            factor: 'Court Jurisdiction Match',
+            points: locationPoints,
+            maxPoints: 15,
+            label: `Admitted in ${p.location?.city || 'Delhi'} Courts & Tribunals`,
+            matched: locationPoints === 15,
+          },
+          {
+            factor: 'Bar Council Verification Seal',
+            points: verificationPoints,
+            maxPoints: 10,
+            label: isVerified ? `Verified Bar Registration (${p.barCouncilRegistration?.registrationNumber || 'Authentic'})` : 'Verification Pending',
+            matched: isVerified,
+          },
         ],
-        summaryExplanation: '90% Match based on practice area and court experience.',
-      }));
+        summaryExplanation: `${matchPercentage}% Match: ${exactCategoryMatch ? 'Specialist in ' + targetCategory : 'Litigation counsel'} with ${expYears} yrs experience${hasPublishedCaseStudy ? ' & verified landmark case study published.' : '.'}`,
+      };
+    });
 
-      return sendSuccess(res, { matchedLawyers: matched, totalCandidates: candidateList.length }, 'Lawyers matched');
-    }
+    // Sort descending by match percentage
+    rankedLawyers.sort((a, b) => b.matchPercentage - a.matchPercentage);
+
+    // Filter to ONLY highly relevant category specialists (excluding unrelated lawyers!)
+    const relevantMatches = rankedLawyers.filter((l) => l.isHighlyRecommended || l.matchPercentage >= 70);
+    const topMatches = relevantMatches.length > 0 ? relevantMatches : rankedLawyers.slice(0, 2);
+
+    return sendSuccess(res, {
+      matchedLawyers: topMatches,
+      allCandidatesCount: profiles.length,
+      totalMatchesCount: topMatches.length,
+      caseProfile,
+    }, 'Top advocate matches computed successfully');
   } catch (error) {
     next(error);
   }
@@ -190,12 +306,15 @@ const searchLawyersDirectory = async (req, res, next) => {
       limit = 20,
     } = req.query;
 
-    const filter = {};
+    const filter = {
+      isBlocked: { $ne: true },
+    };
 
     if (role) {
       filter.professionalRole = role;
     } else {
-      filter.professionalRole = { $in: [ROLES.LAWYER, ROLES.LAW_STUDENT] };
+      // Advocate Directory strictly lists practicing advocates/lawyers (excluding students)
+      filter.professionalRole = ROLES.LAWYER;
     }
 
     if (verifiedOnly === 'true') {
@@ -263,10 +382,162 @@ const getLawyerDetails = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/lawyers/consultation-request
+ * Submit a formal consultation booking request to an advocate
+ */
+const sendConsultationRequest = async (req, res, next) => {
+  try {
+    const {
+      lawyerId,
+      clientName,
+      clientEmail,
+      clientPhone,
+      caseTitle,
+      category,
+      urgency,
+      consultationMode,
+      preferredDate,
+      summary,
+    } = req.body;
+
+    if (!lawyerId) {
+      return sendError(res, 'Lawyer ID is required', 400);
+    }
+
+    const profile = await ProfessionalProfile.findOne({
+      $or: [{ _id: lawyerId }, { user: lawyerId }],
+    }).populate('user', 'email role isVerified fullName');
+
+    if (!profile) {
+      return sendError(res, 'Advocate profile not found', 404);
+    }
+
+    const consultationId = `REQ-${Date.now().toString().slice(-6)}`;
+
+    // Create persistent ConsultationRequest in DB
+    const newReq = await ConsultationRequest.create({
+      consultationId,
+      citizen: req.user?._id || null,
+      clientName: clientName || req.user?.profileData?.fullName || 'Citizen Client',
+      clientEmail: clientEmail || req.user?.email || 'citizen@legalnexus.in',
+      clientPhone: clientPhone || '',
+      lawyer: profile._id,
+      lawyerName: profile.fullName || 'Advocate',
+      barRegistrationNumber: profile.barCouncilRegistration?.registrationNumber || 'Verified',
+      caseTitle: caseTitle || 'Legal Advisory & Dispute Assessment',
+      category: category || profile.practiceAreas?.[0] || 'General Legal Advisory',
+      consultationMode: consultationMode || 'PHONE_CALL',
+      urgency: urgency || 'NORMAL',
+      status: 'PENDING',
+      summary: summary || '',
+    });
+
+    return sendSuccess(
+      res,
+      {
+        ...newReq.toObject(),
+        estimatedResponseTime: urgency === 'CRITICAL' ? 'Within 2 hours' : 'Within 24 hours',
+      },
+      'Consultation request submitted successfully'
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/lawyers/consultation-requests
+ * Retrieve all consultation requests with optional status filtering
+ */
+const getConsultationRequests = async (req, res, next) => {
+  try {
+    const { status, lawyerId, email } = req.query;
+    const filter = {};
+
+    if (status && status !== 'ALL') {
+      filter.status = status;
+    }
+    if (lawyerId) {
+      filter.lawyer = lawyerId;
+    }
+    if (email) {
+      filter.clientEmail = email;
+    }
+
+    const requests = await ConsultationRequest.find(filter)
+      .populate('lawyer', 'fullName title location practiceAreas barCouncilRegistration rating')
+      .sort({ createdAt: -1 });
+
+    return sendSuccess(
+      res,
+      requests,
+      'Consultation requests retrieved successfully',
+      200,
+      {
+        total: requests.length,
+        pendingCount: requests.filter((r) => r.status === 'PENDING').length,
+        acceptedCount: requests.filter((r) => r.status === 'ACCEPTED').length,
+        declinedCount: requests.filter((r) => r.status === 'DECLINED').length,
+      }
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PUT /api/lawyers/consultation-requests/:id/status
+ * Advocate or Admin updates consultation request status (ACCEPTED / DECLINED)
+ */
+const updateConsultationStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status, scheduledDate, scheduledTime, meetingLink, chamberAddress, advocateNotes, declinedReason } = req.body;
+
+    if (!['ACCEPTED', 'DECLINED', 'PENDING', 'COMPLETED'].includes(status)) {
+      return sendError(res, 'Invalid consultation status', 400);
+    }
+
+    const mongoose = require('mongoose');
+    const isMongoId = mongoose.Types.ObjectId.isValid(id);
+    const query = isMongoId ? { $or: [{ _id: id }, { consultationId: id }] } : { consultationId: id };
+
+    const consult = await ConsultationRequest.findOne(query);
+
+    if (!consult) {
+      return sendError(res, 'Consultation request not found', 404);
+    }
+
+    consult.status = status;
+    consult.respondedAt = new Date();
+
+    if (status === 'ACCEPTED') {
+      consult.scheduledDate = scheduledDate || new Date(Date.now() + 86400000).toISOString().split('T')[0];
+      consult.scheduledTime = scheduledTime || '04:00 PM IST';
+      consult.meetingLink = meetingLink || 'https://meet.legalnexus.in/consult-' + consult.consultationId.toLowerCase();
+      consult.chamberAddress = chamberAddress || 'Chamber 402, High Court Complex';
+      consult.advocateNotes = advocateNotes || 'Consultation confirmed. Please keep case documents and ID ready.';
+      consult.declinedReason = undefined;
+    } else if (status === 'DECLINED') {
+      consult.declinedReason = declinedReason || 'Advocate has a calendar conflict / active court hearing on this date.';
+    }
+
+    await consult.save();
+
+    return sendSuccess(res, consult, `Consultation request marked as ${status}`);
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   matchLawyersForCase,
   publishCaseStudy,
   listCaseStudies,
   searchLawyersDirectory,
   getLawyerDetails,
+  sendConsultationRequest,
+  getConsultationRequests,
+  updateConsultationStatus,
 };

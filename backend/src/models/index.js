@@ -16,6 +16,7 @@ const CaseStudy = require('./CaseStudy');
 const VerificationRequest = require('./VerificationRequest');
 const Notification = require('./Notification');
 const AuditLog = require('./AuditLog');
+const ConsultationRequest = require('./ConsultationRequest');
 
 module.exports = {
   User,
@@ -36,4 +37,5 @@ module.exports = {
   VerificationRequest,
   Notification,
   AuditLog,
+  ConsultationRequest,
 };

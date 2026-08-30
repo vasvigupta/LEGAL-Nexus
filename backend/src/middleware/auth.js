@@ -25,6 +25,14 @@ const authenticateJWT = async (req, res, next) => {
       return sendError(res, 'User account is deactivated.', 403);
     }
 
+    if (user.isBlocked) {
+      return sendError(
+        res,
+        `Your account has been blocked by Platform Administration. Reason: ${user.blockedReason || 'Fraudulent or unverified profile activity.'}`,
+        403
+      );
+    }
+
     req.user = user;
     next();
   } catch (error) {
