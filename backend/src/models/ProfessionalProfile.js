@@ -101,6 +101,28 @@ const professionalProfileSchema = new mongoose.Schema(
       default: 'PENDING',
       index: true,
     },
+    verificationBadge: {
+      type: String,
+      enum: ['NONE', 'OCR_VERIFIED', 'BAR_COUNCIL_VERIFIED', 'REJECTED', 'BLOCKED'],
+      default: 'NONE',
+    },
+    ocrVerificationData: {
+      extractedName: String,
+      extractedBarId: String,
+      extractedState: String,
+      extractedYear: Number,
+      confidence: Number,
+      verifiedAt: Date,
+      documentUrl: String,
+    },
+    isBlocked: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    blockedReason: {
+      type: String,
+    },
     verificationReviewedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

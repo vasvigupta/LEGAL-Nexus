@@ -38,6 +38,16 @@ const connectDB = async (customUri = null) => {
         
         global.__MONGO_MEMORY_SERVER__ = mongod;
         global.__MONGO_STORAGE_MODE__ = 'EPHEMERAL_IN_MEMORY';
+
+        // Automatically seed verified advocates, admin, and test citizen accounts
+        try {
+          const { seedDatabase } = require('../seed');
+          await seedDatabase(true);
+          logger.info('In-Memory Database automatically seeded with advocates, admin, and test users.');
+        } catch (seedErr) {
+          logger.warn(`Auto-seeding warning: ${seedErr.message}`);
+        }
+
         return conn;
       } catch (memErr) {
         logger.error(`Failed to spawn MongoMemoryServer fallback: ${memErr.message}`);

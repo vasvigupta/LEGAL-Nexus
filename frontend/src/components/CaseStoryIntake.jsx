@@ -40,6 +40,13 @@ export default function CaseStoryIntake({ user, onOpenAuth, onCaseCreated }) {
   const [analysisResult, setAnalysisResult] = useState(null);
   const [successNotice, setSuccessNotice] = useState(null);
 
+  const messagesEndRef = React.useRef(null);
+  const textareaRef = React.useRef(null);
+
+  React.useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, loading]);
+
   // Floating Voice Assistant State (Bottom Right)
   const [isVoiceOpen, setIsVoiceOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -105,7 +112,8 @@ export default function CaseStoryIntake({ user, onOpenAuth, onCaseCreated }) {
     }
 
     const userMsg = { sender: 'user', text: textToSend };
-    setMessages((prev) => [...prev, userMsg]);
+    const updatedMessages = [...messages, userMsg];
+    setMessages(updatedMessages);
     setInputStory('');
     setVoiceTranscript('');
     setLoading(true);
@@ -115,14 +123,27 @@ export default function CaseStoryIntake({ user, onOpenAuth, onCaseCreated }) {
       const res = await api.post('/ai/analyze', {
         story: textToSend,
         existingCase: analysisResult?.case || null,
+        conversationHistory: updatedMessages,
       });
 
       const data = res.data.data;
-      if (data.case?.status === 'BLOCKED' || data.blocked || data.case?.caseNumber === 'BLOCKED-SECURITY') {
+      if (data.case?.status === 'BLOCKED' || data.blocked || data.guardrailWarning || data.case?.caseNumber === 'BLOCKED-SECURITY') {
         setAnalysisResult(null);
-      } else {
-        setAnalysisResult(data);
+        setMessages((prev) => [
+          ...prev,
+          {
+            sender: 'assistant',
+            isWarning: true,
+            title: '⚠️ Guardrail Warning: Query Blocked',
+            category: data.issue || 'Security Policy Violation',
+            text: data.responseExplanation || 'This platform strictly prohibits queries seeking assistance with illegal acts or evading law enforcement.',
+            guidance: 'Legal Nexus is dedicated to lawful legal intelligence and citizen protection. Requests seeking help with crimes or evading statutory penalties are strictly refused.',
+          },
+        ]);
+        return;
       }
+
+      setAnalysisResult(data);
 
       // 2. Add assistant response to conversation
       const assistantText =
@@ -361,27 +382,156 @@ export default function CaseStoryIntake({ user, onOpenAuth, onCaseCreated }) {
                       )}
                     </div>
                   ) : (
-                    <p className={`whitespace-pre-line ${m.sender === 'user' ? 'text-white' : 'text-slate-800'}`}>
-                      {m.text}
-                    </p>
+                    <div className="space-y-2 leading-relaxed">
+                      {(m.text || '').split('\n').map((line, lineIdx) => {
+                        if (!line.trim()) return <div key={lineIdx} className="h-1" />;
+                        if (m.sender === 'user') {
+                          return <p key={lineIdx} className="text-white font-medium">{line}</p>;
+                        }
+                        if (line.startsWith('### ')) {
+                          return (
+                            <h4 key={lineIdx} className="font-bold text-slate-900 text-xs sm:text-sm pt-2 pb-0.5 flex items-center gap-1.5">
+                              {line.replace('### ', '')}
+                            </h4>
+                          );
+                        }
+                        const formattedHTML = line
+                          .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>')
+                          .replace(/\*(.*?)\*/g, '<em class="italic text-slate-700">$1</em>')
+                          .replace(/`([^`]+)`/g, '<code class="bg-blue-50 text-legal-blue px-1 py-0.5 rounded text-[11px] font-mono border border-blue-100">$1</code>');
+
+                        if (line.startsWith('• ') || line.startsWith('- ')) {
+                          return (
+                            <div key={lineIdx} className="flex items-start gap-1.5 pl-1">
+                              <span className="text-legal-blue font-bold shrink-0">•</span>
+                              <span className="text-slate-800" dangerouslySetInnerHTML={{ __html: formattedHTML.slice(2) }} />
+                            </div>
+                          );
+                        }
+                        if (line.trim().startsWith('└')) {
+                          return (
+                            <div key={lineIdx} className="pl-4 text-[11px] text-slate-600 italic" dangerouslySetInnerHTML={{ __html: formattedHTML }} />
+                          );
+                        }
+                        return (
+                          <p key={lineIdx} className="text-slate-800" dangerouslySetInnerHTML={{ __html: formattedHTML }} />
+                        );
+                      })}
+                    </div>
                   )}
 
                   {/* Clarifying Questions Quick Chips */}
                   {m.clarifyingQuestions && m.clarifyingQuestions.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-slate-200/80 space-y-2">
+                    <div className="mt-3 pt-3 border-t border-slate-200/80 space-y-2.5">
                       <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
                         <HelpCircle className="w-3.5 h-3.5 text-legal-blue" />
                         Key Clarifying Questions (Click to Answer):
                       </span>
-                      <div className="flex flex-col gap-1.5">
+                      <div className="flex flex-col gap-2">
                         {m.clarifyingQuestions.map((q, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => setInputStory(`Answering: ${q} — `)}
-                            className="text-left px-3 py-2 bg-white hover:bg-blue-50/60 text-slate-700 hover:text-legal-blue text-xs rounded-xl border border-slate-200 transition shadow-subtle"
-                          >
-                            → {q}
-                          </button>
+                          <div key={idx} className="space-y-1.5 p-2.5 bg-white/90 rounded-2xl border border-slate-200 shadow-subtle">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setInputStory(`Answering: ${q} — `);
+                                setTimeout(() => textareaRef.current?.focus(), 50);
+                              }}
+                              className="text-left font-semibold text-slate-800 hover:text-legal-blue text-xs flex items-start gap-1.5 w-full transition"
+                            >
+                              <span className="text-legal-blue font-bold">→</span>
+                              <span>{q}</span>
+                            </button>
+                            
+                            {/* Suggested Quick Response Pills */}
+                            <div className="flex flex-wrap gap-1.5 pt-1">
+                              {/* Criminal Law Quick Replies */}
+                              {q.includes('FIR') || q.includes('Police Complaint') ? (
+                                <>
+                                  <button type="button" onClick={() => handleSendMessage('Yes, an FIR has been formally registered at the local police station and investigation is ongoing.')} className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-medium rounded-lg text-[11px] border border-emerald-200 transition">
+                                    ⚡ FIR Registered (Have Copy)
+                                  </button>
+                                  <button type="button" onClick={() => handleSendMessage('I have submitted a written police complaint, but FIR registration is pending.')} className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-medium rounded-lg text-[11px] border border-amber-200 transition">
+                                    ⚡ Complaint Given, FIR Pending
+                                  </button>
+                                  <button type="button" onClick={() => handleSendMessage('The police station refused to register the FIR, need escalation to SP / DCP.')} className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-800 font-medium rounded-lg text-[11px] border border-red-200 transition">
+                                    ⚡ Police Refused FIR
+                                  </button>
+                                </>
+                              ) : null}
+
+                              {q.includes('Medico-Legal') || q.includes('MLC') || q.includes('injuries') ? (
+                                <>
+                                  <button type="button" onClick={() => handleSendMessage('Yes, Medico-Legal Examination (MLC) was completed at the government hospital recording all injuries.')} className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-medium rounded-lg text-[11px] border border-emerald-200 transition">
+                                    ⚡ MLC Completed at Govt Hospital
+                                  </button>
+                                  <button type="button" onClick={() => handleSendMessage('No physical injury occurred, only verbal threat / attempt without bodily injury.')} className="px-2.5 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium rounded-lg text-[11px] border border-slate-200 transition">
+                                    ⚡ No Physical Injury / Threat Only
+                                  </button>
+                                  <button type="button" onClick={() => handleSendMessage('Victim is currently undergoing medical examination and treatment.')} className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-legal-blue font-medium rounded-lg text-[11px] border border-blue-200 transition">
+                                    ⚡ Undergoing Treatment Now
+                                  </button>
+                                </>
+                              ) : null}
+
+                              {q.includes('CCTV') || q.includes('eyewitness') || q.includes('weapon') ? (
+                                <>
+                                  <button type="button" onClick={() => handleSendMessage('Yes, there is clear CCTV footage of the incident and multiple eyewitness statements available.')} className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-medium rounded-lg text-[11px] border border-emerald-200 transition">
+                                    ⚡ Have CCTV & Eyewitness Statements
+                                  </button>
+                                  <button type="button" onClick={() => handleSendMessage('I have recorded threat audio calls and WhatsApp messages as proof.')} className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-legal-blue font-medium rounded-lg text-[11px] border border-blue-200 transition">
+                                    ⚡ Have Threat Call / Audio Proof
+                                  </button>
+                                  <button type="button" onClick={() => handleSendMessage('The weapon of offense was seized by investigating police officers.')} className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-800 font-medium rounded-lg text-[11px] border border-purple-200 transition">
+                                    ⚡ Weapon Seized by Police
+                                  </button>
+                                </>
+                              ) : null}
+
+                              {/* Employment Law Quick Replies */}
+                              {q.includes('month') && (
+                                <>
+                                  <button type="button" onClick={() => handleSendMessage('3 months salary withheld, did not receive any written termination notice.')} className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-legal-blue font-medium rounded-lg text-[11px] border border-blue-200 transition">
+                                    ⚡ 3 Months, No Notice
+                                  </button>
+                                  <button type="button" onClick={() => handleSendMessage('2 months salary pending, received verbal notice only.')} className="px-2.5 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium rounded-lg text-[11px] border border-slate-200 transition">
+                                    ⚡ 2 Months, Verbal Only
+                                  </button>
+                                </>
+                              )}
+                              {(q.includes('contract') || q.includes('appointment') || q.includes('slips')) && !q.includes('marriage') ? (
+                                <>
+                                  <button type="button" onClick={() => handleSendMessage('Yes, I have both my official appointment letter and bank statements showing past salary credits.')} className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-medium rounded-lg text-[11px] border border-emerald-200 transition">
+                                    ⚡ Yes, Have Contract & Bank Statements
+                                  </button>
+                                  <button type="button" onClick={() => handleSendMessage('I have bank statements showing past credits, but no formal contract copy.')} className="px-2.5 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium rounded-lg text-[11px] border border-slate-200 transition">
+                                    ⚡ Bank Statements Only
+                                  </button>
+                                </>
+                              ) : null}
+                              {q.includes('HR') || q.includes('email') || q.includes('Management') ? (
+                                <>
+                                  <button type="button" onClick={() => handleSendMessage('Yes, I sent multiple follow-up emails to HR and management demanding payment, but received no response.')} className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-legal-blue font-medium rounded-lg text-[11px] border border-blue-200 transition">
+                                    ⚡ Emailed HR, No Reply
+                                  </button>
+                                  <button type="button" onClick={() => handleSendMessage('HR rejected my request citing company policy.')} className="px-2.5 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium rounded-lg text-[11px] border border-slate-200 transition">
+                                    ⚡ HR Rejected Request
+                                  </button>
+                                </>
+                              ) : null}
+
+                              {/* Cyber / Banking / Tenancy Quick Replies */}
+                              {q.includes('1930') || q.includes('dispute token') ? (
+                                <>
+                                  <button type="button" onClick={() => handleSendMessage('Yes, registered complaint on 1930 Cyber Helpline and have dispute reference number.')} className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-medium rounded-lg text-[11px] border border-emerald-200 transition">
+                                    ⚡ Have 1930 Dispute Token
+                                  </button>
+                                  <button type="button" onClick={() => handleSendMessage('Not called 1930 yet, calling right now.')} className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-medium rounded-lg text-[11px] border border-amber-200 transition">
+                                    ⚡ Calling 1930 Now
+                                  </button>
+                                </>
+                              ) : null}
+                            </div>
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -402,6 +552,7 @@ export default function CaseStoryIntake({ user, onOpenAuth, onCaseCreated }) {
                 <span>Agents executing: Intake → Classification → Case Builder → RAG → Evidence Audit...</span>
               </div>
             )}
+            <div ref={messagesEndRef} />
           </div>
 
           {/* Story Input Bar & Quick Scenario Starters */}
@@ -423,6 +574,7 @@ export default function CaseStoryIntake({ user, onOpenAuth, onCaseCreated }) {
 
             <div className="relative">
               <textarea
+                ref={textareaRef}
                 rows={2}
                 value={inputStory}
                 onChange={(e) => setInputStory(e.target.value)}

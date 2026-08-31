@@ -1,14 +1,18 @@
 """
 Legal RAG Service Orchestrator
-Coordinates Domain Detection -> Query Expansion -> Hybrid Retrieval -> Re-ranking -> Source Verification -> Structured Synthesis
+Coordinates Domain Detection -> Query Expansion -> Hybrid Retrieval -> Re-ranking -> Source Verification -> LLM Synthesis
 """
 
+import logging
 from typing import Dict, List, Any, Tuple
 from .domain_classifier import LegalDomainClassifier
 from .query_expander import QueryExpander
 from .hybrid_retriever import HybridRetriever
 from .reranker import LegalReranker
 from .source_verifier import SourceVerifier
+from .llm_service import llm_service
+
+logger = logging.getLogger(__name__)
 
 class LegalRAGService:
     def __init__(self, data_dir: str = None):
@@ -23,7 +27,9 @@ class LegalRAGService:
         top_k: int = 4
     ) -> Dict[str, Any]:
         """
-        Executes end-to-end legal research with authoritative citations
+        Executes end-to-end legal research with authoritative citations.
+        Flow: Domain Detection → Query Expansion → Hybrid Retrieval → Re-ranking
+              → Source Verification → LLM Synthesis (with template fallback)
         """
         # 1. Domain Detection
         domain_name, domain_conf, matched_tags = LegalDomainClassifier.classify_domain(query)
@@ -46,19 +52,48 @@ class LegalRAGService:
             explicit_sections=query_meta["explicitSections"]
         )
 
-        top_candidates = reranked_candidates[:top_k]
-
         # 5. Source Verification and Grounding
         verified_provisions, authoritative_sources = self.verifier.verify_and_ground_candidates(
             candidates=top_candidates,
             query=query
         )
 
-        # 6. Synthesize Plain-Language Explanation & Actionable Remedies
-        explanation, remedies = self._synthesize_explanation_and_remedies(
+        # 6. Strict Confidence Gate (80% - 100% required)
+        confidence_percent = int(domain_conf * 100) if domain_conf <= 1.0 else int(domain_conf)
+        if domain_conf < 0.80 or not verified_provisions:
+            low_conf_msg = (
+                f"### ⚠️ Insufficient Statutory Information (Confidence: {confidence_percent}%)\n\n"
+                f"I do not have sufficient verified statutory provisions or specific dispute details in my grounded legal database "
+                f"to reliably answer this query with the required high-confidence threshold (minimum 80% confidence required).\n\n"
+                f"**To identify the exact applicable Acts and Sections under Indian Law:**\n"
+                f"• **Describe your specific issue**: Specify whether this involves unpaid salary, tenancy security deposit, cyber fraud, criminal threat/assault, cheque bounce, or consumer deficiency.\n"
+                f"• **Provide key details**: Include approximate financial amounts, timeline/dates, city/state, and whether any agreement, police complaint (FIR), or notice has been sent.\n"
+                f"• **Official Statutory Reference**: You can search verified Indian legislation at [India Code (indiacode.nic.in)](https://www.indiacode.nic.in) or consult a practicing advocate."
+            )
+            return {
+                "query": query,
+                "detectedDomain": domain_name,
+                "domainConfidence": round(domain_conf, 2),
+                "confidenceScore": confidence_percent,
+                "isHighConfidence": False,
+                "jurisdiction": jurisdiction,
+                "language": language,
+                "legalBasis": [],
+                "explanation": low_conf_msg,
+                "actionableRemedies": [{"step": "Provide Specific Facts", "detail": "Add specific dispute facts or consult a verified advocate."}],
+                "sources": [],
+                "confidence": "LOW_CONFIDENCE_INSUFFICIENT_DATA",
+                "verifiedAt": "2026-08-30",
+                "llmSynthesized": False,
+            }
+
+        # 7. LLM-Powered Synthesis (with template fallback) for High Confidence (>= 80%)
+        explanation, remedies = self._synthesize_with_llm(
             query=query,
             domain=domain_name,
-            provisions=verified_provisions
+            provisions=verified_provisions,
+            candidates=top_candidates,
+            language=language
         )
 
         # Compute Overall Confidence
@@ -67,12 +102,14 @@ class LegalRAGService:
         elif any(p.get("confidence") == "MEDIUM" for p in verified_provisions):
             overall_confidence = "MEDIUM"
         else:
-            overall_confidence = "NEEDS_PROFESSIONAL_VERIFICATION"
+            overall_confidence = "VERIFIED_HIGH_CONFIDENCE"
 
         return {
             "query": query,
             "detectedDomain": domain_name,
             "domainConfidence": round(domain_conf, 2),
+            "confidenceScore": confidence_percent,
+            "isHighConfidence": True,
             "jurisdiction": jurisdiction,
             "language": language,
             "legalBasis": verified_provisions,
@@ -80,16 +117,23 @@ class LegalRAGService:
             "actionableRemedies": remedies,
             "sources": authoritative_sources,
             "confidence": overall_confidence,
-            "verifiedAt": "2026-08-27",
+            "verifiedAt": "2026-08-30",
+            "llmSynthesized": explanation != self._template_explanation(provisions),
         }
 
-    def _synthesize_explanation_and_remedies(
+    def _synthesize_with_llm(
         self,
         query: str,
         domain: str,
-        provisions: List[Dict[str, Any]]
+        provisions: List[Dict[str, Any]],
+        candidates: List[Dict[str, Any]],
+        language: str = "en"
     ) -> Tuple[str, List[Dict[str, str]]]:
-        remedies = []
+        """
+        Attempt LLM synthesis from RAG-retrieved chunks.
+        Falls back to template synthesis if LLM is unavailable.
+        """
+        remedies = self._extract_remedies(provisions)
 
         if not provisions:
             return (
@@ -97,17 +141,49 @@ class LegalRAGService:
                 [{"step": "Consult Advocate", "detail": "Consult a legal professional through the Nyaya Setu directory."}]
             )
 
+        # Try LLM synthesis
+        try:
+            llm_response = llm_service.synthesize_from_rag(
+                user_query=query,
+                domain=domain,
+                retrieved_chunks=candidates,
+                language=language
+            )
+
+            if llm_response:
+                # Verify the LLM output is safe
+                safety_check = llm_service.verify_output_safety(llm_response, candidates)
+                if safety_check.get("safe", True):
+                    logger.info("RAG → LLM synthesis successful and verified safe")
+                    return llm_response, remedies
+                else:
+                    logger.warning(f"LLM output failed safety check: {safety_check.get('reason')}")
+                    # Fall through to template
+        except Exception as e:
+            logger.warning(f"LLM synthesis failed, using template fallback: {e}")
+
+        # Template fallback
+        return self._template_explanation(provisions), remedies
+
+    def _template_explanation(self, provisions: List[Dict[str, Any]]) -> str:
+        """Original template-based explanation as fallback."""
+        if not provisions:
+            return "Based on the query, no direct statutory provisions were located. Please consult a verified advocate for specific guidance."
+
         primary = provisions[0]
         act_title = primary.get("act", "the applicable statute")
         section = primary.get("section", "relevant provision")
 
-        explanation = (
+        return (
             f"Under Indian law ({act_title}), your issue falls within the scope of {section}. "
             f"The law stipulates that rights and liabilities are governed by statutory mandates. "
             f"Specifically: {primary.get('statutorySnippet', '')} "
             f"You have a statutory entitlement to seek full redressal, compensation, and restitution through designated authorities."
         )
 
+    def _extract_remedies(self, provisions: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+        """Extract actionable remedies from verified provisions."""
+        remedies = []
         for p in provisions:
             if p.get("actionableRemedy"):
                 remedies.append({
@@ -115,5 +191,4 @@ class LegalRAGService:
                     "remedy": p.get("actionableRemedy"),
                     "sourceUrl": p.get("sourceUrl"),
                 })
-
-        return explanation, remedies
+        return remedies

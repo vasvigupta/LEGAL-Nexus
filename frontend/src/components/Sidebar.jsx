@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
+  ShieldCheck,
 } from 'lucide-react';
 
 export default function Sidebar({
@@ -25,19 +26,28 @@ export default function Sidebar({
   collapsed = false,
   onToggleCollapse,
 }) {
+  const isAdmin = user?.role === 'ADMIN';
+
+  // Admin Specific Sidebar Items
+  const adminItems = [
+    { id: 'admin',    label: 'Admin Portal',       shortLabel: 'Admin',    icon: ShieldCheck },
+    { id: 'profile',  label: 'Profile',            shortLabel: 'Profile',  icon: Users,       requireAuth: true },
+    { id: 'settings', label: 'Platform Settings',  shortLabel: 'Settings', icon: Settings },
+  ];
+
+  // Standard Workspace Items (For Citizens, Advocates & Students)
   const mainWorkspaceItems = [
-    { id: 'cases',     label: 'Case Management',     shortLabel: 'Cases',    icon: LayoutDashboard, badge: null },
-    { id: 'intake',    label: 'AI Legal Assistant',   shortLabel: 'AI Chat',  icon: Bot,             badge: 'Agentic', highlight: true },
-    { id: 'documents', label: 'Document Intelligence',shortLabel: 'Doc AI',   icon: FileText,        badge: 'Audit' },
-    { id: 'drafts',    label: 'Smart Legal Drafting', shortLabel: 'Drafting', icon: PenTool,         badge: '7 Forms' },
-    { id: 'research',  label: 'Statutory Research',   shortLabel: 'Research', icon: BookOpen,        badge: 'RAG' },
-    { id: 'lawyers',   label: 'Advocate Directory',   shortLabel: 'Lawyers',  icon: UserCheck,       badge: 'Verified' },
+    { id: 'cases',     label: 'Case Management',     shortLabel: 'Cases',    icon: LayoutDashboard },
+    { id: 'intake',    label: 'AI Legal Assistant',   shortLabel: 'AI Chat',  icon: Bot },
+    { id: 'documents', label: 'Document Intelligence',shortLabel: 'Doc AI',   icon: FileText },
+    { id: 'drafts',    label: 'Smart Legal Drafting', shortLabel: 'Drafting', icon: PenTool },
+    { id: 'research',  label: 'Statutory Research',   shortLabel: 'Research', icon: BookOpen },
+    { id: 'lawyers',   label: 'Advocate Directory',   shortLabel: 'Lawyers',  icon: UserCheck },
   ];
 
   const secondaryItems = [
-    { id: 'profile',  label: 'Profile & Network',  shortLabel: 'Profile',  icon: Users,    requireAuth: true },
+    { id: 'profile',  label: 'Profile & Network',  shortLabel: 'Profile',  icon: Users,       requireAuth: true },
     { id: 'settings', label: 'Platform Settings',  shortLabel: 'Settings', icon: Settings },
-    { id: 'system',   label: 'System Status',      shortLabel: 'System',   icon: Activity, requireRole: ['LAWYER', 'ADMIN', 'LAW_STUDENT'] },
   ];
 
   // Role → gradient for avatar
@@ -147,40 +157,59 @@ export default function Sidebar({
 
       {/* ── Navigation List ──────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5 dark-scrollbar">
-
-        {/* Core Workspace */}
-        <div className="space-y-0.5">
-          {!collapsed && (
-            <div className="px-3 pb-2 flex items-center gap-2">
-              <div className="h-px flex-1 bg-slate-800/80" />
-              <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest whitespace-nowrap">
-                Workspace
-              </span>
-              <div className="h-px flex-1 bg-slate-800/80" />
+        {isAdmin ? (
+          /* Admin Navigation: Only Admin Portal, Profile, Platform Settings */
+          <div className="space-y-0.5">
+            {!collapsed && (
+              <div className="px-3 pb-2 flex items-center gap-2">
+                <div className="h-px flex-1 bg-slate-800/80" />
+                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap">
+                  Admin Console
+                </span>
+                <div className="h-px flex-1 bg-slate-800/80" />
+              </div>
+            )}
+            {adminItems.map((item) => (
+              <NavItem key={item.id} item={item} />
+            ))}
+          </div>
+        ) : (
+          /* Standard Citizen & Advocate Navigation */
+          <>
+            {/* Core Workspace */}
+            <div className="space-y-0.5">
+              {!collapsed && (
+                <div className="px-3 pb-2 flex items-center gap-2">
+                  <div className="h-px flex-1 bg-slate-800/80" />
+                  <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest whitespace-nowrap">
+                    Workspace
+                  </span>
+                  <div className="h-px flex-1 bg-slate-800/80" />
+                </div>
+              )}
+              {mainWorkspaceItems.map((item) => (
+                <NavItem key={item.id} item={item} />
+              ))}
             </div>
-          )}
-          {mainWorkspaceItems.map((item) => (
-            <NavItem key={item.id} item={item} />
-          ))}
-        </div>
 
-        {/* Secondary / Account */}
-        <div className="space-y-0.5">
-          {!collapsed && (
-            <div className="px-3 pb-2 flex items-center gap-2">
-              <div className="h-px flex-1 bg-slate-800/80" />
-              <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest whitespace-nowrap">
-                Account
-              </span>
-              <div className="h-px flex-1 bg-slate-800/80" />
+            {/* Secondary / Account */}
+            <div className="space-y-0.5">
+              {!collapsed && (
+                <div className="px-3 pb-2 flex items-center gap-2">
+                  <div className="h-px flex-1 bg-slate-800/80" />
+                  <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest whitespace-nowrap">
+                    Account
+                  </span>
+                  <div className="h-px flex-1 bg-slate-800/80" />
+                </div>
+              )}
+              {secondaryItems.map((item) => {
+                if (item.requireAuth && !user) return null;
+                return <NavItem key={item.id} item={item} />;
+              })}
             </div>
-          )}
-          {secondaryItems.map((item) => {
-            if (item.requireAuth && !user) return null;
-            if (item.requireRole && (!user || !item.requireRole.includes(user.role))) return null;
-            return <NavItem key={item.id} item={item} />;
-          })}
-        </div>
+          </>
+        )}
       </div>
 
       {/* ── Bottom User Card ─────────────────────────────────── */}
@@ -189,13 +218,13 @@ export default function Sidebar({
           <div className={`flex items-center gap-3 p-2 rounded-xl bg-slate-900/60 border border-slate-800/80 ${collapsed ? 'justify-center' : ''}`}>
             {/* Gradient avatar */}
             <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${roleGrad[user.role] || 'from-blue-500 to-sky-400'} flex items-center justify-center text-white text-xs font-extrabold shadow-sm shrink-0`}>
-              {(user.profileData?.fullName || user.email).charAt(0).toUpperCase()}
+              {(user.profileData?.fullName || user.email || 'U').charAt(0).toUpperCase()}
             </div>
 
             {!collapsed && (
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-white truncate" title={user.email}>
-                  {user.profileData?.fullName || user.email}
+                <p className="text-xs font-bold text-white truncate" title={user.email || 'User'}>
+                  {user.profileData?.fullName || user.email || 'Authorized User'}
                 </p>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className="text-[9px] font-bold text-legal-gold bg-legal-gold/10 px-1.5 rounded uppercase tracking-wider">

@@ -127,11 +127,14 @@ class LegalWorkflowEngine:
         if urgency.recommendation:
             action_plan.insert(0, {"step": "Urgency Guidance", "detail": urgency.recommendation})
 
-        raw_explanation = (
-            f"Based on your statement regarding {case_state.issue} ({case_state.category}), "
-            f"we have established structured case {case_state.caseNumber}. "
-            f"{research_res.get('explanation', '')}"
-        )
+        if research_res.get("llmSynthesized", False):
+            raw_explanation = research_res.get("explanation", "")
+        else:
+            raw_explanation = (
+                f"Based on your statement regarding {case_state.issue} ({case_state.category}), "
+                f"we have established structured case {case_state.caseNumber}. "
+                f"{research_res.get('explanation', '')}"
+            )
 
         # Run output guardrail validation
         output_guard_res = guardrail_manager.process_output(

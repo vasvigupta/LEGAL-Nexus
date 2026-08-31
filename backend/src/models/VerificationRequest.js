@@ -25,6 +25,19 @@ const verificationRequestSchema = new mongoose.Schema(
       certificateUrl: String,
       additionalNotes: String,
     },
+    ocrExtractedData: {
+      extractedName: String,
+      extractedBarId: String,
+      extractedState: String,
+      extractedYear: Number,
+      rawOcrText: String,
+      nameMatchScore: Number,
+      barIdValid: Boolean,
+    },
+    ocrConfidence: {
+      type: Number,
+      default: 0,
+    },
     status: {
       type: String,
       enum: VERIFICATION_STATUSES,
@@ -44,6 +57,25 @@ const verificationRequestSchema = new mongoose.Schema(
     rejectionReason: {
       type: String,
     },
+    rejectedAt: {
+      type: Date,
+      index: { expires: 259200 }, // Auto-vanish / expire after 3 days (3 * 24 * 60 * 60 = 259200s)
+    },
+    isBlocked: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    blockedReason: {
+      type: String,
+    },
+    blockedAt: {
+      type: Date,
+    },
+    blockedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
   },
   {
     timestamps: true,
@@ -52,3 +84,4 @@ const verificationRequestSchema = new mongoose.Schema(
 
 const VerificationRequest = mongoose.model('VerificationRequest', verificationRequestSchema);
 module.exports = VerificationRequest;
+

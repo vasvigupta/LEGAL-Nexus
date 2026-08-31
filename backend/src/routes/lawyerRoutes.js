@@ -6,6 +6,9 @@ const {
   listCaseStudies,
   searchLawyersDirectory,
   getLawyerDetails,
+  sendConsultationRequest,
+  getConsultationRequests,
+  updateConsultationStatus,
 } = require('../controllers/lawyerController');
 const { authenticateJWT, optionalAuth } = require('../middleware/auth');
 const { validate } = require('../middleware/validate');
@@ -14,7 +17,12 @@ const { auditLogMiddleware } = require('../middleware/auditLog');
 const router = express.Router();
 
 // POST /api/lawyers/match (Multi-factor weighted lawyer matching)
-router.post('/match', authenticateJWT, matchLawyersForCase);
+router.post('/match', optionalAuth, matchLawyersForCase);
+
+// Consultation Requests
+router.post('/consultation-request', optionalAuth, sendConsultationRequest);
+router.get('/consultation-requests', optionalAuth, getConsultationRequests);
+router.put('/consultation-requests/:id/status', optionalAuth, updateConsultationStatus);
 
 // POST /api/lawyers/case-studies (Publish anonymized case study)
 router.post(
