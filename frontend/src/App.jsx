@@ -17,6 +17,7 @@ import CaseComparator from './components/CaseComparator';
 import ResearchNotebook from './components/ResearchNotebook';
 import UserProfile from './components/UserProfile';
 import SettingsView from './components/SettingsView';
+import AdminDashboard from './components/AdminDashboard';
 import {
   LayoutDashboard,
   Bot,
@@ -28,15 +29,46 @@ import {
   Activity,
   Settings,
   Scale,
-  LogOut,
-  Sparkles,
   ShieldCheck,
-  ChevronRight,
+  GitCompare,
+  Bookmark,
 } from 'lucide-react';
 import api from './services/api';
 
+const VALID_TABS = [
+  'landing',
+  'login',
+  'signup',
+  'cases',
+  'intake',
+  'documents',
+  'drafts',
+  'research',
+  'lawyers',
+  'comparator',
+  'notebook',
+  'admin',
+  'profile',
+  'settings',
+  'system',
+];
+
+const getInitialTab = () => {
+  if (typeof window !== 'undefined') {
+    const hash = window.location.hash.replace('#', '').trim();
+    if (hash && VALID_TABS.includes(hash)) {
+      return hash;
+    }
+    const saved = localStorage.getItem('nyaya_active_tab');
+    if (saved && VALID_TABS.includes(saved)) {
+      return saved;
+    }
+  }
+  return 'landing';
+};
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState('landing'); // landing | login | signup | cases | intake | documents | drafts | research | lawyers | profile | settings | system
+  const [activeTab, setActiveTabState] = useState(getInitialTab);
   const [user, setUser] = useState(null);
   const [isNewCaseOpen, setIsNewCaseOpen] = useState(false);
   const [selectedCase, setSelectedCase] = useState(null);
@@ -45,6 +77,49 @@ export default function App() {
   const [healthStatus, setHealthStatus] = useState(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Custom tab setter with Browser History & Hash Synchronization
+  const setActiveTab = (tab, pushHistory = true) => {
+    if (!VALID_TABS.includes(tab)) return;
+    setActiveTabState(tab);
+    localStorage.setItem('nyaya_active_tab', tab);
+
+    if (typeof window !== 'undefined') {
+      const currentHash = window.location.hash.replace('#', '').trim();
+      if (pushHistory) {
+        if (currentHash !== tab) {
+          window.history.pushState({ tab }, '', '#' + tab);
+        }
+      } else {
+        window.history.replaceState({ tab }, '', '#' + tab);
+      }
+    }
+  };
+
+  // Listen to Browser Back / Forward Button Navigation
+  useEffect(() => {
+    const handlePopState = (e) => {
+      const hash = window.location.hash.replace('#', '').trim();
+      const targetTab = e.state?.tab || hash || 'landing';
+      if (VALID_TABS.includes(targetTab)) {
+        setActiveTabState(targetTab);
+        localStorage.setItem('nyaya_active_tab', targetTab);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('hashchange', handlePopState);
+
+    const initTab = getInitialTab();
+    if (window.location.hash !== '#' + initTab) {
+      window.history.replaceState({ tab: initTab }, '', '#' + initTab);
+    }
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('hashchange', handlePopState);
+    };
+  }, []);
 
   useEffect(() => {
     checkCurrentUser();
@@ -64,14 +139,20 @@ export default function App() {
       const res = await api.get('/auth/me');
       const authUser = res.data.data.user;
       setUser(authUser);
-      if (activeTab === 'landing' || activeTab === 'login' || activeTab === 'signup') {
-        if (authUser.role === 'LAWYER') {
-          setActiveTab('lawyers');
+
+      const currentTab = getInitialTab();
+      if (currentTab === 'login' || currentTab === 'signup' || currentTab === 'landing') {
+        if (authUser.role === 'ADMIN') {
+          setActiveTab('admin', false);
+        } else if (authUser.role === 'LAWYER') {
+          setActiveTab('lawyers', false);
         } else {
-          setActiveTab('cases');
+          setActiveTab('cases', false);
         }
-      } else if (authUser.role === 'LAWYER' && (activeTab === 'cases' || activeTab === 'intake')) {
-        setActiveTab('lawyers');
+      } else if (authUser.role === 'LAWYER' && (currentTab === 'cases' || currentTab === 'intake')) {
+        setActiveTab('lawyers', false);
+      } else {
+        setActiveTab(currentTab, false);
       }
     } catch {
       localStorage.removeItem('nyaya_access_token');
@@ -84,7 +165,10 @@ export default function App() {
       const res = await api.get('/health');
       setHealthStatus(res.data.data);
     } catch {
-      setHealthStatus({ status: 'OPERATIONAL', database: { mongo: 'CONNECTED', redis: 'READY' } });
+      setHealthStatus({
+        status: 'OPERATIONAL',
+        database: { mongo: 'CONNECTED', redis: 'READY' },
+      });
     }
   };
 
@@ -110,10 +194,27 @@ export default function App() {
 
   const handleAuthSuccess = (authUser) => {
     setUser(authUser);
-    if (authUser.role === 'LAWYER') {
+    if (authUser.role !== 'LAWYER') {
+      loadCases();
+    }
+
+    const currentTab = getInitialTab();
+    if (
+      currentTab &&
+      currentTab !== 'login' &&
+      currentTab !== 'signup' &&
+      currentTab !== 'landing'
+    ) {
+      if (authUser.role === 'LAWYER' && (currentTab === 'cases' || currentTab === 'intake')) {
+        setActiveTab('lawyers');
+      } else {
+        setActiveTab(currentTab);
+      }
+    } else if (authUser.role === 'ADMIN') {
+      setActiveTab('admin');
+    } else if (authUser.role === 'LAWYER') {
       setActiveTab('lawyers');
     } else {
-      loadCases();
       setActiveTab('cases');
     }
   };
@@ -126,28 +227,73 @@ export default function App() {
 
   const handleSelectTab = (tab) => {
     setIsMobileMenuOpen(false);
-    // Public routes: landing, login, signup
     if (tab === 'landing' || tab === 'login' || tab === 'signup') {
       setActiveTab(tab);
       return;
     }
 
-    // Protected routes: redirect to login if not authenticated
     if (!user) {
       setActiveTab('login');
       return;
     }
 
-    // Disallow Case Management and AI Legal Assistant for LAWYER role
     if (user.role === 'LAWYER' && (tab === 'cases' || tab === 'intake')) {
       setActiveTab('lawyers');
+      return;
+    }
+
+    if (tab === 'admin' && user.role !== 'ADMIN') {
+      setActiveTab('cases');
       return;
     }
 
     setActiveTab(tab);
   };
 
-  const isPublicView = activeTab === 'landing' || activeTab === 'login' || activeTab === 'signup';
+  const isPublicView =
+    activeTab === 'landing' || activeTab === 'login' || activeTab === 'signup';
+
+  const getMobileMenuItems = () => {
+    if (!user) return [];
+
+    if (user.role === 'ADMIN') {
+      return [
+        { id: 'admin', label: 'Admin Portal', icon: ShieldCheck },
+        { id: 'documents', label: 'Document Intelligence', icon: FileText },
+        { id: 'research', label: 'Statutory Research', icon: BookOpen },
+        { id: 'lawyers', label: 'Advocate Directory', icon: UserCheck },
+        { id: 'profile', label: 'Profile & Network', icon: Users },
+        { id: 'settings', label: 'Platform Settings', icon: Settings },
+        { id: 'system', label: 'System Status', icon: Activity },
+      ];
+    }
+
+    if (user.role === 'LAWYER') {
+      return [
+        { id: 'lawyers', label: 'Advocate Hub & Requests', icon: UserCheck },
+        { id: 'documents', label: 'Document Intelligence', icon: FileText },
+        { id: 'drafts', label: 'Smart Legal Drafting', icon: PenTool },
+        { id: 'research', label: 'Statutory Research', icon: BookOpen },
+        { id: 'comparator', label: 'Case Law Comparator', icon: GitCompare },
+        { id: 'notebook', label: 'Research Notebook', icon: Bookmark },
+        { id: 'profile', label: 'Profile & Case History', icon: Users },
+        { id: 'settings', label: 'Platform Settings', icon: Settings },
+        { id: 'system', label: 'System Status', icon: Activity },
+      ];
+    }
+
+    // Default / Citizen Role
+    return [
+      { id: 'cases', label: 'Case Management', icon: LayoutDashboard },
+      { id: 'intake', label: 'AI Legal Assistant', icon: Bot },
+      { id: 'documents', label: 'Document Intelligence', icon: FileText },
+      { id: 'drafts', label: 'Smart Legal Drafting', icon: PenTool },
+      { id: 'research', label: 'Statutory Research', icon: BookOpen },
+      { id: 'lawyers', label: 'Advocate Directory', icon: UserCheck },
+      { id: 'profile', label: 'Profile & Network', icon: Users },
+      { id: 'settings', label: 'Platform Settings', icon: Settings },
+    ];
+  };
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans text-slate-900 selection:bg-legal-blue selection:text-white">
@@ -165,7 +311,7 @@ export default function App() {
 
       {/* Main Workspace Layout */}
       <div className="flex-grow flex flex-col md:flex-row relative overflow-hidden">
-        {/* Enterprise Collapsible Sidebar (visible on protected views) */}
+        {/* Collapsible Sidebar */}
         {!isPublicView && user && (
           <Sidebar
             activeTab={activeTab}
@@ -181,20 +327,7 @@ export default function App() {
         {/* Mobile Navigation Drawer */}
         {isMobileMenuOpen && !isPublicView && user && (
           <div className="md:hidden bg-[#0B1F33] text-white border-b border-slate-800 px-4 py-4 space-y-1.5 absolute w-full left-0 top-0 z-40 shadow-2xl animate-in fade-in duration-200">
-            {[
-              { id: 'cases', label: 'Case Management', icon: LayoutDashboard, hideForRoles: ['LAWYER'] },
-              { id: 'intake', label: 'AI Legal Assistant', icon: Bot, hideForRoles: ['LAWYER'] },
-              { id: 'lawyers', label: user.role === 'LAWYER' ? 'Advocate Hub & Requests' : 'Advocate Directory', icon: UserCheck },
-              { id: 'documents', label: 'Document Intelligence', icon: FileText },
-              { id: 'drafts', label: 'Smart Legal Drafting', icon: PenTool },
-              { id: 'research', label: 'Statutory Research', icon: BookOpen },
-              { id: 'profile', label: user.role === 'LAWYER' ? 'Profile & Case History' : 'Profile & Network', icon: Users, requireAuth: true },
-              { id: 'settings', label: 'Platform Settings', icon: Settings },
-              { id: 'system', label: 'System Status', icon: Activity, requireRole: ['LAWYER', 'ADMIN', 'LAW_STUDENT'] },
-            ].map((item) => {
-              if (item.requireAuth && !user) return null;
-              if (item.requireRole && (!user || !item.requireRole.includes(user.role))) return null;
-              if (item.hideForRoles && user && item.hideForRoles.includes(user.role)) return null;
+            {getMobileMenuItems().map((item) => {
               const Icon = item.icon;
               const active = activeTab === item.id;
               return (
@@ -202,7 +335,9 @@ export default function App() {
                   key={item.id}
                   onClick={() => handleSelectTab(item.id)}
                   className={`w-full text-left px-4 py-3 rounded-2xl text-xs font-bold flex items-center gap-3 transition ${
-                    active ? 'bg-legal-blue text-white shadow-md' : 'text-slate-300 hover:bg-slate-800'
+                    active
+                      ? 'bg-legal-blue text-white shadow-md'
+                      : 'text-slate-300 hover:bg-slate-800'
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -213,11 +348,13 @@ export default function App() {
           </div>
         )}
 
-        {/* Primary Content Viewport — key prop triggers page-enter animation on tab change */}
+        {/* Primary Content Viewport */}
         <main
           key={activeTab}
           className={`flex-1 w-full mx-auto overflow-y-auto page-enter ${
-            isPublicView ? 'max-w-7xl px-4 sm:px-6 lg:px-8 py-8' : 'p-4 sm:p-6 lg:p-8 max-w-7xl'
+            isPublicView
+              ? 'max-w-7xl px-4 sm:px-6 lg:px-8 py-8'
+              : 'p-4 sm:p-6 lg:p-8 max-w-7xl'
           }`}
         >
           {/* PUBLIC ROUTES */}
@@ -225,7 +362,8 @@ export default function App() {
             <LandingPage
               onGetStarted={() => {
                 if (user) {
-                  if (user.role === 'LAWYER') setActiveTab('lawyers');
+                  if (user.role === 'ADMIN') setActiveTab('admin');
+                  else if (user.role === 'LAWYER') setActiveTab('lawyers');
                   else setActiveTab('intake');
                 } else {
                   setActiveTab('login');
@@ -241,7 +379,9 @@ export default function App() {
             <LoginPage
               onAuthSuccess={handleAuthSuccess}
               onNavigateToSignup={() => setActiveTab('signup')}
-              onForgotPassword={() => alert('Password reset link has been dispatched to your email address.')}
+              onForgotPassword={() =>
+                alert('Password reset link has been dispatched to your email address.')
+              }
             />
           )}
 
@@ -252,9 +392,9 @@ export default function App() {
             />
           )}
 
-          {/* PROTECTED ROUTES (Require Authentication) */}
-          {activeTab === 'cases' && (
-            user ? (
+          {/* PROTECTED ROUTES */}
+          {activeTab === 'cases' &&
+            (user ? (
               <CaseList
                 cases={cases}
                 loading={loadingCases}
@@ -263,52 +403,80 @@ export default function App() {
                 onNewCase={() => setIsNewCaseOpen(true)}
               />
             ) : (
-              <LoginPage onAuthSuccess={handleAuthSuccess} onNavigateToSignup={() => setActiveTab('signup')} />
-            )
-          )}
+              <LoginPage
+                onAuthSuccess={handleAuthSuccess}
+                onNavigateToSignup={() => setActiveTab('signup')}
+              />
+            ))}
 
-          {activeTab === 'intake' && (
-            user ? (
-              <CaseStoryIntake user={user} onOpenAuth={() => setActiveTab('login')} onCaseCreated={handleCaseCreated} />
+          {activeTab === 'intake' &&
+            (user ? (
+              <CaseStoryIntake
+                user={user}
+                onOpenAuth={() => setActiveTab('login')}
+                onCaseCreated={handleCaseCreated}
+              />
             ) : (
-              <LoginPage onAuthSuccess={handleAuthSuccess} onNavigateToSignup={() => setActiveTab('signup')} />
-            )
-          )}
+              <LoginPage
+                onAuthSuccess={handleAuthSuccess}
+                onNavigateToSignup={() => setActiveTab('signup')}
+              />
+            ))}
 
-          {activeTab === 'documents' && (
-            user ? (
-              <DocumentIntelligenceModal user={user} onOpenAuth={() => setActiveTab('login')} />
+          {activeTab === 'documents' &&
+            (user ? (
+              <DocumentIntelligenceModal
+                user={user}
+                onOpenAuth={() => setActiveTab('login')}
+              />
             ) : (
-              <LoginPage onAuthSuccess={handleAuthSuccess} onNavigateToSignup={() => setActiveTab('signup')} />
-            )
-          )}
+              <LoginPage
+                onAuthSuccess={handleAuthSuccess}
+                onNavigateToSignup={() => setActiveTab('signup')}
+              />
+            ))}
 
-          {activeTab === 'drafts' && (
-            user ? (
-              <LegalDraftGenerator user={user} onOpenAuth={() => setActiveTab('login')} />
+          {activeTab === 'drafts' &&
+            (user ? (
+              <LegalDraftGenerator
+                user={user}
+                onOpenAuth={() => setActiveTab('login')}
+              />
             ) : (
-              <LoginPage onAuthSuccess={handleAuthSuccess} onNavigateToSignup={() => setActiveTab('signup')} />
-            )
-          )}
+              <LoginPage
+                onAuthSuccess={handleAuthSuccess}
+                onNavigateToSignup={() => setActiveTab('signup')}
+              />
+            ))}
 
-          {activeTab === 'research' && (
-            user ? (
-              <LegalResearchPortal user={user} onOpenAuth={() => setActiveTab('login')} />
+          {activeTab === 'research' &&
+            (user ? (
+              <LegalResearchPortal
+                user={user}
+                onOpenAuth={() => setActiveTab('login')}
+              />
             ) : (
-              <LoginPage onAuthSuccess={handleAuthSuccess} onNavigateToSignup={() => setActiveTab('signup')} />
-            )
-          )}
+              <LoginPage
+                onAuthSuccess={handleAuthSuccess}
+                onNavigateToSignup={() => setActiveTab('signup')}
+              />
+            ))}
 
-          {activeTab === 'lawyers' && (
-            user ? (
-              <LawyerDirectory user={user} onOpenAuth={() => setActiveTab('login')} />
+          {activeTab === 'lawyers' &&
+            (user ? (
+              <LawyerDirectory
+                user={user}
+                onOpenAuth={() => setActiveTab('login')}
+              />
             ) : (
-              <LoginPage onAuthSuccess={handleAuthSuccess} onNavigateToSignup={() => setActiveTab('signup')} />
-            )
-          )}
+              <LoginPage
+                onAuthSuccess={handleAuthSuccess}
+                onNavigateToSignup={() => setActiveTab('signup')}
+              />
+            ))}
 
-          {activeTab === 'comparator' && (
-            user ? (
+          {activeTab === 'comparator' &&
+            (user ? (
               user.role === 'LAWYER' ? (
                 <CaseComparator
                   user={user}
@@ -316,15 +484,20 @@ export default function App() {
                   onSaveToNotebook={() => setActiveTab('notebook')}
                 />
               ) : (
-                <LawyerDirectory user={user} onOpenAuth={() => setActiveTab('login')} />
+                <LawyerDirectory
+                  user={user}
+                  onOpenAuth={() => setActiveTab('login')}
+                />
               )
             ) : (
-              <LoginPage onAuthSuccess={handleAuthSuccess} onNavigateToSignup={() => setActiveTab('signup')} />
-            )
-          )}
+              <LoginPage
+                onAuthSuccess={handleAuthSuccess}
+                onNavigateToSignup={() => setActiveTab('signup')}
+              />
+            ))}
 
-          {activeTab === 'notebook' && (
-            user ? (
+          {activeTab === 'notebook' &&
+            (user ? (
               user.role === 'LAWYER' ? (
                 <ResearchNotebook
                   user={user}
@@ -332,36 +505,60 @@ export default function App() {
                   onSelectTab={handleSelectTab}
                 />
               ) : (
-                <LawyerDirectory user={user} onOpenAuth={() => setActiveTab('login')} />
+                <LawyerDirectory
+                  user={user}
+                  onOpenAuth={() => setActiveTab('login')}
+                />
               )
             ) : (
-              <LoginPage onAuthSuccess={handleAuthSuccess} onNavigateToSignup={() => setActiveTab('signup')} />
-            )
-          )}
+              <LoginPage
+                onAuthSuccess={handleAuthSuccess}
+                onNavigateToSignup={() => setActiveTab('signup')}
+              />
+            ))}
 
-          {activeTab === 'profile' && (
-            user ? (
+          {activeTab === 'admin' &&
+            (user ? (
+              <AdminDashboard user={user} />
+            ) : (
+              <LoginPage
+                onAuthSuccess={handleAuthSuccess}
+                onNavigateToSignup={() => setActiveTab('signup')}
+              />
+            ))}
+
+          {activeTab === 'profile' &&
+            (user ? (
               <UserProfile user={user} />
             ) : (
-              <LoginPage onAuthSuccess={handleAuthSuccess} onNavigateToSignup={() => setActiveTab('signup')} />
-            )
-          )}
+              <LoginPage
+                onAuthSuccess={handleAuthSuccess}
+                onNavigateToSignup={() => setActiveTab('signup')}
+              />
+            ))}
 
-          {activeTab === 'settings' && (
-            user ? (
+          {activeTab === 'settings' &&
+            (user ? (
               <SettingsView user={user} onSelectTab={handleSelectTab} />
             ) : (
-              <LoginPage onAuthSuccess={handleAuthSuccess} onNavigateToSignup={() => setActiveTab('signup')} />
-            )
-          )}
+              <LoginPage
+                onAuthSuccess={handleAuthSuccess}
+                onNavigateToSignup={() => setActiveTab('signup')}
+              />
+            ))}
 
-          {activeTab === 'system' && (
-            user ? (
-              <SystemHealth healthStatus={healthStatus} onRefresh={checkHealth} />
+          {activeTab === 'system' &&
+            (user ? (
+              <SystemHealth
+                healthStatus={healthStatus}
+                onRefresh={checkHealth}
+              />
             ) : (
-              <LoginPage onAuthSuccess={handleAuthSuccess} onNavigateToSignup={() => setActiveTab('signup')} />
-            )
-          )}
+              <LoginPage
+                onAuthSuccess={handleAuthSuccess}
+                onNavigateToSignup={() => setActiveTab('signup')}
+              />
+            ))}
         </main>
       </div>
 
@@ -380,25 +577,29 @@ export default function App() {
         user={user}
       />
 
-      {/* Upgraded Footer */}
+      {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-8 shrink-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            {/* Brand */}
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-legal-blue to-sky-400 flex items-center justify-center shadow-sm">
                 <Scale className="w-4 h-4 text-white" />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-extrabold text-slate-900 tracking-tight">Legal Nexus</span>
-                  <span className="text-[9px] font-bold text-legal-gold bg-legal-gold/10 px-1.5 py-0.5 rounded border border-legal-gold/20 tracking-wider uppercase">AI</span>
+                  <span className="text-sm font-extrabold text-slate-900 tracking-tight">
+                    Legal Nexus
+                  </span>
+                  <span className="text-[9px] font-bold text-legal-gold bg-legal-gold/10 px-1.5 py-0.5 rounded border border-legal-gold/20 tracking-wider uppercase">
+                    AI
+                  </span>
                 </div>
-                <p className="text-[10px] text-slate-400 font-medium">AI-Powered Legal Access & Case Navigation</p>
+                <p className="text-[10px] text-slate-400 font-medium">
+                  AI-Powered Legal Access & Case Navigation
+                </p>
               </div>
             </div>
 
-            {/* Quick links */}
             <div className="flex items-center gap-6 text-xs text-slate-500">
               {[
                 { label: 'AI Assistant', tab: 'intake' },
@@ -416,7 +617,6 @@ export default function App() {
               ))}
             </div>
 
-            {/* Trust + copyright */}
             <div className="flex flex-col items-end gap-1.5">
               <div className="flex items-center gap-2 text-[10px] text-slate-400">
                 <span className="flex items-center gap-1 text-emerald-500 font-semibold">
@@ -426,7 +626,9 @@ export default function App() {
                 <span className="text-slate-300">•</span>
                 <span>256-bit encrypted</span>
               </div>
-              <span className="text-[10px] text-slate-400">© 2026 Legal Nexus Platform. All rights reserved.</span>
+              <span className="text-[10px] text-slate-400">
+                © 2026 Legal Nexus Platform. All rights reserved.
+              </span>
             </div>
           </div>
         </div>

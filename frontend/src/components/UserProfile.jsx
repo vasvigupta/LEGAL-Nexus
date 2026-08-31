@@ -26,11 +26,18 @@ import {
   Gavel,
   FileCheck2,
   X,
+  FileText,
+  Upload,
+  Check,
+  AlertCircle,
+  Clock,
+  ExternalLink,
 } from 'lucide-react';
 import api from '../services/api';
 
 export default function UserProfile({ user }) {
   const [profile, setProfile] = useState(null);
+  const [verificationData, setVerificationData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -86,6 +93,14 @@ export default function UserProfile({ user }) {
 
   // Active Tab
   const [activeSubTab, setActiveSubTab] = useState('profile'); // profile | experiences | caseHistories | preview | network
+
+  // OCR Verification state
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrProgressStep, setOcrProgressStep] = useState(0);
+  const [ocrNotice, setOcrNotice] = useState(null);
+  const [sampleOcrText, setSampleOcrText] = useState('');
+
+  // Networking state
   const [networkUsers, setNetworkUsers] = useState([]);
   const [loadingNetwork, setLoadingNetwork] = useState(false);
   const [netSearch, setNetSearch] = useState('');
@@ -96,6 +111,7 @@ export default function UserProfile({ user }) {
 
   useEffect(() => {
     loadProfile();
+    loadVerificationStatus();
   }, [user]);
 
   useEffect(() => {
@@ -147,6 +163,15 @@ export default function UserProfile({ user }) {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadVerificationStatus = async () => {
+    try {
+      const res = await api.get('/verification/my-status');
+      setVerificationData(res.data.data || null);
+    } catch {
+      // ignore
     }
   };
 
@@ -219,6 +244,47 @@ export default function UserProfile({ user }) {
     }
   };
 
+  const handleTriggerOcrScan = async (overrideBarId = null) => {
+    const targetBarId = overrideBarId || barRegNumber || 'D/1428/2006';
+    setOcrLoading(true);
+    setOcrNotice(null);
+    setOcrProgressStep(1);
+
+    try {
+      await new Promise((r) => setTimeout(r, 600));
+      setOcrProgressStep(2);
+      await new Promise((r) => setTimeout(r, 600));
+      setOcrProgressStep(3);
+
+      const res = await api.post('/verification/ocr-submit', {
+        fullName: fullName || user.email.split('@')[0],
+        barRegistrationNumber: targetBarId,
+        stateBarCouncil: 'Bar Council of Delhi',
+        enrollmentYear: 2006,
+        sampleOcrText: sampleOcrText || undefined,
+        documentImageBase64: 'data:image/png;base64,simulated_bar_id_card',
+      });
+
+      setOcrProgressStep(4);
+      setOcrNotice({
+        type: 'success',
+        text: '🛡️ AI OCR Scan Completed! Bar ID validated & queued in the Admin Verification Dashboard.',
+        data: res.data.data,
+      });
+
+      setBarRegNumber(targetBarId);
+      loadProfile();
+      loadVerificationStatus();
+    } catch (err) {
+      setOcrNotice({
+        type: 'error',
+        text: err.response?.data?.message || 'Failed to process OCR verification.',
+      });
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
   // Experience Actions
   const openAddExp = () => {
     setEditingExpIndex(null);
@@ -269,13 +335,12 @@ export default function UserProfile({ user }) {
     setExperiences(updated);
     setExpModalOpen(false);
 
-    // Persist directly
     try {
       await api.put('/profiles/professional', { experiences: updated });
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch {
-      // Ignored; will save on main save
+      // Saved in main state
     }
   };
 
@@ -344,7 +409,6 @@ export default function UserProfile({ user }) {
     setCaseHistories(updated);
     setCaseModalOpen(false);
 
-    // Persist directly
     try {
       await api.put('/profiles/professional', { caseHistories: updated });
       setSuccess(true);
@@ -377,6 +441,11 @@ export default function UserProfile({ user }) {
     );
   }
 
+  const vStatus = verificationData?.verificationStatus || profile?.verificationStatus || 'PENDING';
+  const isOfficiallyVerified = vStatus === 'VERIFIED' || user?.isVerified;
+  const isOcrVerified = vStatus === 'OCR_VERIFIED';
+  const isRejected = vStatus === 'REJECTED';
+
   const filteredNetwork = networkUsers.filter(
     (u) =>
       u._id !== profile?.user &&
@@ -387,7 +456,7 @@ export default function UserProfile({ user }) {
 
   return (
     <div className="space-y-6">
-      {/* Banner / Header */}
+      {/* Header Banner */}
       <div className="bg-[#0B1F33] text-white p-6 sm:p-8 rounded-3xl border border-slate-800 shadow-legal flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -396,12 +465,12 @@ export default function UserProfile({ user }) {
             </span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-            {isLawyer ? 'Advocate Profile, Experiences & Case Histories' : 'Profile & Identity Settings'}
+            {isProfessional ? 'Advocate Profile, Experiences & Verification' : 'Citizen Account Profile'}
           </h2>
           <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
-            {isLawyer
-              ? 'Manage your Bar Council verified credentials, upload past professional experiences and courtroom case histories for prospective clients and colleagues.'
-              : 'Manage your personal profile details and statutory notification preferences.'}
+            {isProfessional
+              ? 'Manage your Bar Council verified credentials, verify your Bar ID via AI OCR, and manage courtroom precedents.'
+              : 'Manage your personal account profile, contact details, and filed case communications.'}
           </p>
         </div>
 
@@ -418,7 +487,7 @@ export default function UserProfile({ user }) {
         )}
       </div>
 
-      {/* Navigation Sub-tabs */}
+      {/* Sub-navigation Tabs */}
       {isProfessional && (
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2 text-xs sm:text-sm font-semibold">
           <button
@@ -430,7 +499,7 @@ export default function UserProfile({ user }) {
             }`}
           >
             <User className="w-4 h-4" />
-            <span>Profile & Credentials</span>
+            <span>Profile & Verification</span>
           </button>
 
           {isLawyer && (
@@ -487,73 +556,220 @@ export default function UserProfile({ user }) {
         </div>
       )}
 
-      {/* ── SUB-TAB 1: PROFILE FORM ─────────────────────────────── */}
+      {/* SUB-TAB 1: PROFILE FORM & OCR VERIFICATION */}
       {activeSubTab === 'profile' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Overview summary card (4 cols) */}
-          <div className="lg:col-span-4 bg-white p-6 rounded-3xl border border-slate-200/90 shadow-subtle flex flex-col items-center text-center space-y-4">
-            <div className="w-20 h-20 rounded-3xl bg-[#0B1F33] text-legal-gold flex items-center justify-center font-extrabold text-2xl relative shadow-md border border-slate-700">
-              {fullName?.charAt(0) || user?.email?.charAt(0).toUpperCase()}
-              {profile?.barCouncilRegistration?.isVerified && (
-                <span
-                  className="absolute bottom-0 right-0 w-6 h-6 bg-emerald-500 text-white rounded-full flex items-center justify-center border-2 border-white text-xs"
-                  title="Verified Advocate"
-                >
-                  ✓
-                </span>
-              )}
-            </div>
-
-            <div>
-              <h3 className="text-base font-bold text-slate-900">{fullName || 'Authorized User'}</h3>
-              <p className="text-xs text-legal-blue font-semibold">{title || (isLawyer ? 'Advocate on Record' : user?.email)}</p>
-              <span className="inline-block mt-2 px-3 py-0.5 bg-blue-50 text-legal-blue text-[10px] font-extrabold rounded-full border border-blue-200 uppercase tracking-wider">
-                {user?.role}
-              </span>
-            </div>
-
-            <div className="w-full border-t border-slate-100 pt-4 text-left text-xs space-y-3 text-slate-600">
-              <div className="flex items-center gap-2">
-                <Mail className="w-4 h-4 text-slate-400 shrink-0" />
-                <span className="truncate">{user?.email}</span>
-              </div>
-              {phone && (
-                <div className="flex items-center gap-2">
-                  <Phone className="w-4 h-4 text-slate-400 shrink-0" />
-                  <span>{phone}</span>
-                </div>
-              )}
-              {city && (
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
-                  <span>
-                    {city}, {state || 'India'}
+          {/* Left Column: Overview + Two-Step Verification Card */}
+          <div className="lg:col-span-4 space-y-5">
+            {/* Overview Card */}
+            <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-subtle flex flex-col items-center text-center space-y-4">
+              <div className="w-20 h-20 rounded-3xl bg-[#0B1F33] text-legal-gold flex items-center justify-center font-extrabold text-2xl relative shadow-md border border-slate-700">
+                {fullName?.charAt(0) || user?.email?.charAt(0).toUpperCase()}
+                {isProfessional && isOfficiallyVerified && (
+                  <span
+                    className="absolute -bottom-1 -right-1 w-7 h-7 bg-blue-600 text-white rounded-full flex items-center justify-center border-2 border-white text-xs shadow-md"
+                    title="Bar Council Verified Advocate"
+                  >
+                    🛡️
                   </span>
+                )}
+              </div>
+
+              <div>
+                <h3 className="text-base font-bold text-slate-900">{fullName || 'Authorized User'}</h3>
+                <p className="text-xs text-slate-400 mt-0.5">{user?.email}</p>
+                <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+                  <span className="px-3 py-0.5 bg-blue-50 text-legal-blue text-[10px] font-extrabold rounded-full border border-blue-200 uppercase tracking-wider">
+                    {user?.role}
+                  </span>
+
+                  {isProfessional && (
+                    isOfficiallyVerified ? (
+                      <span className="px-3 py-0.5 bg-blue-100 text-blue-900 text-[10px] font-extrabold rounded-full border border-blue-300 flex items-center gap-1">
+                        🔵 Bar Council Verified
+                      </span>
+                    ) : isOcrVerified ? (
+                      <span className="px-3 py-0.5 bg-purple-100 text-purple-900 text-[10px] font-extrabold rounded-full border border-purple-300 flex items-center gap-1">
+                        🛡️ OCR Verified (In Queue)
+                      </span>
+                    ) : isRejected ? (
+                      <span className="px-3 py-0.5 bg-rose-100 text-rose-800 text-[10px] font-bold rounded-full border border-rose-300">
+                        ❌ Verification Rejected
+                      </span>
+                    ) : (
+                      <span className="px-3 py-0.5 bg-amber-50 text-amber-800 text-[10px] font-bold rounded-full border border-amber-200">
+                        ⏳ Verification Pending
+                      </span>
+                    )
+                  )}
                 </div>
-              )}
-              {barRegNumber && (
+              </div>
+
+              <div className="w-full border-t border-slate-100 pt-4 text-left text-xs space-y-2.5 text-slate-600">
                 <div className="flex items-center gap-2">
-                  <Award className="w-4 h-4 text-legal-gold shrink-0" />
-                  <span className="font-mono">Enrol: {barRegNumber}</span>
+                  <Mail className="w-4 h-4 text-slate-400 shrink-0" />
+                  <span className="truncate">{user?.email}</span>
+                </div>
+                {phone && (
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span>{phone}</span>
+                  </div>
+                )}
+                {city && (
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span>{city}, {state || 'India'}</span>
+                  </div>
+                )}
+                {barRegNumber && (
+                  <div className="flex items-center gap-2">
+                    <Award className="w-4 h-4 text-legal-gold shrink-0" />
+                    <span className="font-mono">Enrol: {barRegNumber}</span>
+                  </div>
+                )}
+              </div>
+
+              {isLawyer && (
+                <div className="w-full bg-slate-50 p-4 rounded-2xl border border-slate-200/80 text-left text-xs space-y-2">
+                  <div className="flex justify-between items-center text-slate-700">
+                    <span className="font-medium">Experiences Uploaded:</span>
+                    <span className="font-bold text-legal-blue">{experiences.length}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-slate-700">
+                    <span className="font-medium">Case Histories Uploaded:</span>
+                    <span className="font-bold text-emerald-600">{caseHistories.length}</span>
+                  </div>
                 </div>
               )}
             </div>
 
-            {isLawyer && (
-              <div className="w-full bg-slate-50 p-4 rounded-2xl border border-slate-200/80 text-left text-xs space-y-2">
-                <div className="flex justify-between items-center text-slate-700">
-                  <span className="font-medium">Experiences Uploaded:</span>
-                  <span className="font-bold text-legal-blue">{experiences.length}</span>
+            {/* AI OCR Verification Widget */}
+            {isProfessional && (
+              <div className="bg-white p-5 sm:p-6 rounded-3xl border border-purple-200 shadow-subtle space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-purple-100 rounded-lg text-purple-700">
+                      <Sparkles className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                        AI Document OCR
+                      </h4>
+                      <p className="text-[10px] text-slate-500">Bar ID Card & Sanad Extractor</p>
+                    </div>
+                  </div>
+
+                  {isOfficiallyVerified ? (
+                    <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                      Seal Granted
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                      Instant Scan
+                    </span>
+                  )}
                 </div>
-                <div className="flex justify-between items-center text-slate-700">
-                  <span className="font-medium">Case Histories Uploaded:</span>
-                  <span className="font-bold text-emerald-600">{caseHistories.length}</span>
-                </div>
+
+                {isOfficiallyVerified ? (
+                  <div className="p-3.5 bg-blue-50 rounded-2xl border border-blue-200 text-xs space-y-2">
+                    <div className="flex items-center gap-2 text-blue-900 font-bold">
+                      <ShieldCheck className="w-4 h-4 text-blue-700" />
+                      <span>Official Bar Council Verified Advocate</span>
+                    </div>
+                    <p className="text-[11px] text-blue-800">
+                      Your enrollment ID <strong className="font-mono">{barRegNumber || 'D/1428/2006'}</strong> is authenticated on Platform Administration.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Upload or enter your <strong>State Bar Council ID</strong>. Our AI OCR engine will scan your credentials and queue your profile for Admin seal approval.
+                    </p>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                        Bar Council ID Number
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. D/1428/2006 or MAH/5678/2015"
+                        value={barRegNumber}
+                        onChange={(e) => setBarRegNumber(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-semibold focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-slate-400 font-semibold uppercase">Quick Samples:</span>
+                      <div className="flex flex-wrap gap-1">
+                        {[
+                          { label: 'Delhi (D/1428/2006)', val: 'D/1428/2006' },
+                          { label: 'MH (MAH/5678/2015)', val: 'MAH/5678/2015' },
+                          { label: 'KA (KAR/2891/2013)', val: 'KAR/2891/2013' },
+                          { label: 'UP (UP/9102/2019)', val: 'UP/9102/2019' },
+                        ].map((s) => (
+                          <button
+                            key={s.val}
+                            type="button"
+                            onClick={() => {
+                              setBarRegNumber(s.val);
+                              handleTriggerOcrScan(s.val);
+                            }}
+                            className="text-[10px] px-2 py-0.5 bg-slate-100 hover:bg-purple-100 hover:text-purple-800 text-slate-600 rounded font-medium border border-slate-200 transition"
+                          >
+                            {s.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {ocrLoading && (
+                      <div className="p-3 bg-purple-50 rounded-2xl border border-purple-200 space-y-2 text-xs">
+                        <div className="flex items-center justify-between text-purple-900 font-bold text-[11px]">
+                          <span className="flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 animate-spin text-purple-600" />
+                            AI Document OCR Scanning...
+                          </span>
+                          <span>{ocrProgressStep * 25}%</span>
+                        </div>
+                        <div className="w-full bg-purple-200 h-1.5 rounded-full overflow-hidden">
+                          <div
+                            className="bg-purple-600 h-full transition-all duration-300 rounded-full"
+                            style={{ width: `${ocrProgressStep * 25}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {ocrNotice && (
+                      <div
+                        className={`p-3 rounded-2xl border text-xs ${
+                          ocrNotice.type === 'success'
+                            ? 'bg-purple-50 text-purple-900 border-purple-200'
+                            : 'bg-rose-50 text-rose-800 border-rose-200'
+                        }`}
+                      >
+                        <p className="font-semibold">{ocrNotice.text}</p>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={ocrLoading}
+                      onClick={() => handleTriggerOcrScan()}
+                      className="w-full py-2.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center justify-center gap-1.5"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>{ocrLoading ? 'Scanning Document...' : '⚡ Scan Document & Verify Bar ID'}</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* Form (8 cols) */}
+          {/* Right Column: Profile Edit Form */}
           <div className="lg:col-span-8 bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/90 shadow-subtle">
             <form onSubmit={handleSaveProfile} className="space-y-5">
               <h3 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
@@ -585,7 +801,7 @@ export default function UserProfile({ user }) {
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-legal-blue focus:outline-none"
-                    placeholder="e.g. Adv. Rakesh Gupta"
+                    placeholder="e.g. Adv. Rajeshwar Sen"
                   />
                 </div>
 
@@ -640,7 +856,7 @@ export default function UserProfile({ user }) {
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Bio / Advocate Profile Summary
+                  Bio / Professional Summary
                 </label>
                 <textarea
                   rows={3}
@@ -671,7 +887,7 @@ export default function UserProfile({ user }) {
                             value={barRegNumber}
                             onChange={(e) => setBarRegNumber(e.target.value)}
                             className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-legal-blue focus:outline-none"
-                            placeholder="e.g. D/1234/2020"
+                            placeholder="e.g. D/1428/2006"
                           />
                         </div>
 
@@ -716,6 +932,21 @@ export default function UserProfile({ user }) {
                       </>
                     )}
 
+                    {user.role === 'LAW_STUDENT' && (
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                          Law College / Institution
+                        </label>
+                        <input
+                          type="text"
+                          value={institution}
+                          onChange={(e) => setInstitution(e.target.value)}
+                          className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-legal-blue focus:outline-none"
+                          placeholder="e.g. Faculty of Law, DU"
+                        />
+                      </div>
+                    )}
+
                     <div>
                       <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
                         Practice Areas (comma separated)
@@ -725,7 +956,7 @@ export default function UserProfile({ user }) {
                         value={practiceAreas}
                         onChange={(e) => setPracticeAreas(e.target.value)}
                         className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-legal-blue focus:outline-none"
-                        placeholder="Employment, Property, Criminal, Consumer"
+                        placeholder="Employment & Labour Law, Criminal Law, Cyber Law"
                       />
                     </div>
 
@@ -790,7 +1021,7 @@ export default function UserProfile({ user }) {
         </div>
       )}
 
-      {/* ── SUB-TAB 2: PAST EXPERIENCES ─────────────────────────── */}
+      {/* SUB-TAB 2: PAST EXPERIENCES */}
       {activeSubTab === 'experiences' && (
         <div className="space-y-5">
           <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-subtle flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -884,7 +1115,7 @@ export default function UserProfile({ user }) {
         </div>
       )}
 
-      {/* ── SUB-TAB 3: CASE HISTORIES ───────────────────────────── */}
+      {/* SUB-TAB 3: CASE HISTORIES */}
       {activeSubTab === 'caseHistories' && (
         <div className="space-y-5">
           <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-subtle flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -993,7 +1224,7 @@ export default function UserProfile({ user }) {
         </div>
       )}
 
-      {/* ── SUB-TAB 4: PUBLIC VIEW PREVIEW ──────────────────────── */}
+      {/* SUB-TAB 4: PUBLIC VIEW PREVIEW */}
       {activeSubTab === 'preview' && (
         <div className="space-y-6">
           <div className="p-4 bg-sky-50 border border-sky-200 rounded-2xl text-xs text-sky-900 flex items-center justify-between">
@@ -1010,7 +1241,7 @@ export default function UserProfile({ user }) {
           </div>
 
           <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/90 shadow-card space-y-6">
-            {/* Header / Identity */}
+            {/* Identity */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-100">
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 rounded-2xl bg-[#0B1F33] text-legal-gold flex items-center justify-center font-extrabold text-2xl shadow-md border border-slate-700">
@@ -1051,7 +1282,7 @@ export default function UserProfile({ user }) {
               </p>
             </div>
 
-            {/* Practice areas & Courts */}
+            {/* Practice areas */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2">Practice Areas</h4>
@@ -1070,7 +1301,7 @@ export default function UserProfile({ user }) {
               </div>
             </div>
 
-            {/* Past Experiences Section */}
+            {/* Past Experiences */}
             <div>
               <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3 flex items-center gap-2">
                 <Briefcase className="w-4 h-4 text-legal-blue" />
@@ -1096,7 +1327,7 @@ export default function UserProfile({ user }) {
               )}
             </div>
 
-            {/* Case Histories Section */}
+            {/* Case Histories */}
             <div>
               <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3 flex items-center gap-2">
                 <Gavel className="w-4 h-4 text-legal-blue" />
@@ -1129,7 +1360,7 @@ export default function UserProfile({ user }) {
         </div>
       )}
 
-      {/* ── SUB-TAB 5: NETWORKING HUB ───────────────────────────── */}
+      {/* SUB-TAB 5: NETWORKING HUB */}
       {activeSubTab === 'network' && (
         <div className="space-y-4">
           <div className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-subtle flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
@@ -1162,7 +1393,7 @@ export default function UserProfile({ user }) {
             <div className="text-center py-20 bg-white rounded-3xl border border-slate-200/80 shadow-subtle p-6 max-w-md mx-auto space-y-3">
               <Users className="w-12 h-12 text-slate-300 mx-auto" />
               <h3 className="text-sm font-bold text-slate-800">No other professionals found</h3>
-              <p className="text-xs text-slate-500">Colleagues will appear once they sign up.</p>
+              <p className="text-xs text-slate-500">Colleagues will appear once they join the network.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1186,7 +1417,7 @@ export default function UserProfile({ user }) {
                       </div>
                       {prof.verificationStatus === 'VERIFIED' && (
                         <span className="text-[9px] font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 uppercase">
-                          Verified
+                          🔵 Verified
                         </span>
                       )}
                     </div>
@@ -1236,7 +1467,7 @@ export default function UserProfile({ user }) {
         </div>
       )}
 
-      {/* ── MODAL: ADD / EDIT PAST EXPERIENCE ───────────────────── */}
+      {/* MODAL: ADD / EDIT PAST EXPERIENCE */}
       {expModalOpen && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-4">
@@ -1371,7 +1602,7 @@ export default function UserProfile({ user }) {
         </div>
       )}
 
-      {/* ── MODAL: ADD / EDIT CASE HISTORY ──────────────────────── */}
+      {/* MODAL: ADD / EDIT CASE HISTORY */}
       {caseModalOpen && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">

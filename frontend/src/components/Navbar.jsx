@@ -5,12 +5,9 @@ import {
   LogIn,
   Menu,
   X,
-  Search,
   Sparkles,
   ShieldCheck,
-  Bell,
   ChevronRight,
-  Command,
 } from 'lucide-react';
 
 export default function Navbar({
@@ -31,6 +28,7 @@ export default function Navbar({
       case 'drafts':    return 'Smart Statutory Drafting Engine';
       case 'research':  return 'Statutory Legal Search';
       case 'lawyers':   return 'Verified Advocate Ecosystem';
+      case 'admin':     return 'Admin Verification & Compliance Console';
       case 'profile':   return 'User Profile & Network Hub';
       case 'settings':  return 'Platform Settings';
       case 'system':    return 'System Infrastructure Monitor';
@@ -96,46 +94,24 @@ export default function Navbar({
       {/* ── Right: Actions ───────────────────────────────────── */}
       <div className="flex items-center gap-2 sm:gap-3">
 
-        {/* Command-palette search pill */}
-        {activeTab !== 'landing' && (
-          <button
-            onClick={() => onSelectTab && onSelectTab('research')}
-            title="Search Indian statutory laws"
-            className="hidden md:flex items-center gap-2 px-3.5 py-2 bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-xs rounded-xl border border-slate-700 transition group"
-          >
-            <Search className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 transition" />
-            <span className="text-slate-500 group-hover:text-slate-300 transition">Search statutes...</span>
-            <span className="ml-2 flex items-center gap-0.5 text-[10px] text-slate-600 bg-slate-700/60 px-1.5 py-0.5 rounded-md border border-slate-700 font-mono">
-              <Command className="w-2.5 h-2.5" />K
-            </span>
-          </button>
-        )}
 
-        {/* Notification bell (UI-only) */}
-        {user && (
-          <button
-            title="Notifications"
-            className="relative p-2 text-slate-500 hover:text-slate-200 hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-700 transition"
-          >
-            <Bell className="w-4 h-4" />
-            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-legal-gold rounded-full" />
-          </button>
-        )}
+
+
 
         {/* User chip or auth buttons */}
         {user ? (
           <div className="flex items-center gap-2 bg-slate-800/80 pl-1.5 pr-1.5 py-1.5 rounded-xl border border-slate-700/80 shadow-sm">
             {/* Gradient avatar */}
-            <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${avatarGradient} flex items-center justify-center text-white text-[11px] font-extrabold shadow-sm shrink-0`}>
-              {(user.profileData?.fullName || user.email).charAt(0).toUpperCase()}
+            <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${avatarGradient || 'from-blue-500 to-sky-400'} flex items-center justify-center text-white text-[11px] font-extrabold shadow-sm shrink-0`}>
+              {(user.profileData?.fullName || user.email || 'U').charAt(0).toUpperCase()}
             </div>
 
             <div className="hidden sm:flex flex-col text-right pr-1 min-w-0">
-              <span className="text-xs font-bold text-white truncate max-w-[120px]" title={user.email}>
-                {user.profileData?.fullName || user.email.split('@')[0]}
+              <span className="text-xs font-bold text-white truncate max-w-[120px]" title={user.email || 'User'}>
+                {user.profileData?.fullName || (user.email ? user.email.split('@')[0] : 'User')}
               </span>
               <span className="text-[9px] font-extrabold text-legal-gold uppercase tracking-wider leading-none mt-0.5">
-                {user.role}
+                {user.role || 'CITIZEN'}
               </span>
             </div>
 

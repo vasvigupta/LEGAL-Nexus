@@ -16,6 +16,7 @@ import {
   Sparkles,
   GitCompare,
   Bookmark,
+  ShieldCheck,
 } from 'lucide-react';
 
 export default function Sidebar({
@@ -27,17 +28,28 @@ export default function Sidebar({
   collapsed = false,
   onToggleCollapse,
 }) {
+  const isAdmin = user?.role === 'ADMIN';
   const isLawyer = user?.role === 'LAWYER';
 
+  // Admin Specific Sidebar Items
+  const adminItems = [
+    { id: 'admin', label: 'Admin Portal', shortLabel: 'Admin', icon: ShieldCheck },
+    { id: 'documents', label: 'Document Intelligence', shortLabel: 'Doc AI', icon: FileText },
+    { id: 'research', label: 'Statutory Research', shortLabel: 'Research', icon: BookOpen },
+    { id: 'lawyers', label: 'Advocate Directory', shortLabel: 'Advocates', icon: UserCheck },
+    { id: 'system', label: 'System Status', shortLabel: 'System', icon: Activity },
+  ];
+
+  // Standard Workspace Items with Role Restrictions
   const rawWorkspaceItems = [
-    { id: 'cases',      label: 'Case Management',     shortLabel: 'Cases',      icon: LayoutDashboard, badge: null, hideForLawyer: true },
-    { id: 'intake',     label: 'AI Legal Assistant',   shortLabel: 'AI Chat',    icon: Bot,             badge: 'Agentic', highlight: true, hideForLawyer: true },
-    { id: 'lawyers',    label: isLawyer ? 'Advocate Hub & Requests' : 'Advocate Directory', shortLabel: 'Advocates', icon: UserCheck, badge: isLawyer ? 'Requests' : 'Verified' },
-    { id: 'comparator', label: 'Case Comparator',      shortLabel: 'Comparator', icon: GitCompare,      badge: 'Dual AI', lawyerOnly: true },
-    { id: 'notebook',   label: 'Research Notebook',    shortLabel: 'Notebook',   icon: Bookmark,        badge: 'Notes',   lawyerOnly: true },
-    { id: 'documents',  label: 'Document Intelligence',shortLabel: 'Doc AI',     icon: FileText,        badge: 'Audit' },
-    { id: 'drafts',     label: 'Smart Legal Drafting', shortLabel: 'Drafting',   icon: PenTool,         badge: '7 Forms' },
-    { id: 'research',   label: 'Statutory Research',   shortLabel: 'Research',   icon: BookOpen,        badge: 'RAG' },
+    { id: 'cases', label: 'Case Management', shortLabel: 'Cases', icon: LayoutDashboard, hideForLawyer: true },
+    { id: 'intake', label: 'AI Legal Assistant', shortLabel: 'AI Chat', icon: Bot, badge: 'Agentic', highlight: true, hideForLawyer: true },
+    { id: 'lawyers', label: isLawyer ? 'Advocate Hub & Requests' : 'Advocate Directory', shortLabel: 'Advocates', icon: UserCheck, badge: isLawyer ? 'Requests' : 'Verified' },
+    { id: 'comparator', label: 'Case Law Comparator', shortLabel: 'Comparator', icon: GitCompare, badge: 'Dual AI', lawyerOnly: true },
+    { id: 'notebook', label: 'Research Notebook', shortLabel: 'Notebook', icon: Bookmark, badge: 'Notes', lawyerOnly: true },
+    { id: 'documents', label: 'Document Intelligence', shortLabel: 'Doc AI', icon: FileText, badge: 'Audit' },
+    { id: 'drafts', label: 'Smart Legal Drafting', shortLabel: 'Drafting', icon: PenTool, badge: '7 Forms' },
+    { id: 'research', label: 'Statutory Research', shortLabel: 'Research', icon: BookOpen, badge: 'RAG' },
   ];
 
   const mainWorkspaceItems = rawWorkspaceItems.filter((item) => {
@@ -47,17 +59,17 @@ export default function Sidebar({
   });
 
   const secondaryItems = [
-    { id: 'profile',  label: isLawyer ? 'Profile & Case History' : 'Profile & Network', shortLabel: 'Profile', icon: Users, requireAuth: true },
-    { id: 'settings', label: 'Platform Settings',  shortLabel: 'Settings', icon: Settings },
-    { id: 'system',   label: 'System Status',      shortLabel: 'System',   icon: Activity, requireRole: ['LAWYER', 'ADMIN', 'LAW_STUDENT'] },
+    { id: 'profile', label: isLawyer ? 'Profile & Case History' : 'Profile & Network', shortLabel: 'Profile', icon: Users, requireAuth: true },
+    { id: 'settings', label: 'Platform Settings', shortLabel: 'Settings', icon: Settings },
+    { id: 'system', label: 'System Status', shortLabel: 'System', icon: Activity, requireRole: ['LAWYER', 'ADMIN', 'LAW_STUDENT'] },
   ];
 
   // Role → gradient for avatar
   const roleGrad = {
-    CITIZEN:     'from-blue-500 to-sky-400',
-    LAWYER:      'from-legal-gold to-amber-400',
+    CITIZEN: 'from-blue-500 to-sky-400',
+    LAWYER: 'from-legal-gold to-amber-400',
     LAW_STUDENT: 'from-emerald-500 to-teal-400',
-    ADMIN:       'from-purple-500 to-violet-400',
+    ADMIN: 'from-purple-500 to-violet-400',
   };
 
   const NavItem = ({ item }) => {
@@ -75,7 +87,7 @@ export default function Sidebar({
             : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-100'
         }`}
       >
-        {/* Gold active left bar */}
+        {/* Active left indicator bar */}
         {active && (
           <span className="absolute left-0 top-2 bottom-2 w-[3px] bg-legal-gold rounded-r-full shadow-gold-glow" />
         )}
@@ -150,7 +162,9 @@ export default function Sidebar({
           <button
             onClick={onToggleCollapse}
             title={collapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
-            className={`p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-lg transition ${collapsed ? 'absolute right-1.5 bottom-auto top-4' : ''}`}
+            className={`p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-lg transition ${
+              collapsed ? 'absolute right-1.5 bottom-auto top-4' : ''
+            }`}
           >
             {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
           </button>
@@ -159,40 +173,78 @@ export default function Sidebar({
 
       {/* ── Navigation List ──────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5 dark-scrollbar">
-
-        {/* Core Workspace */}
-        <div className="space-y-0.5">
-          {!collapsed && (
-            <div className="px-3 pb-2 flex items-center gap-2">
-              <div className="h-px flex-1 bg-slate-800/80" />
-              <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest whitespace-nowrap">
-                Workspace
-              </span>
-              <div className="h-px flex-1 bg-slate-800/80" />
+        {isAdmin ? (
+          /* Admin Navigation */
+          <>
+            <div className="space-y-0.5">
+              {!collapsed && (
+                <div className="px-3 pb-2 flex items-center gap-2">
+                  <div className="h-px flex-1 bg-slate-800/80" />
+                  <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap">
+                    Admin Console
+                  </span>
+                  <div className="h-px flex-1 bg-slate-800/80" />
+                </div>
+              )}
+              {adminItems.map((item) => (
+                <NavItem key={item.id} item={item} />
+              ))}
             </div>
-          )}
-          {mainWorkspaceItems.map((item) => (
-            <NavItem key={item.id} item={item} />
-          ))}
-        </div>
 
-        {/* Secondary / Account */}
-        <div className="space-y-0.5">
-          {!collapsed && (
-            <div className="px-3 pb-2 flex items-center gap-2">
-              <div className="h-px flex-1 bg-slate-800/80" />
-              <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest whitespace-nowrap">
-                Account
-              </span>
-              <div className="h-px flex-1 bg-slate-800/80" />
+            <div className="space-y-0.5">
+              {!collapsed && (
+                <div className="px-3 pb-2 flex items-center gap-2">
+                  <div className="h-px flex-1 bg-slate-800/80" />
+                  <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest whitespace-nowrap">
+                    Account
+                  </span>
+                  <div className="h-px flex-1 bg-slate-800/80" />
+                </div>
+              )}
+              {secondaryItems.map((item) => {
+                if (item.requireAuth && !user) return null;
+                return <NavItem key={item.id} item={item} />;
+              })}
             </div>
-          )}
-          {secondaryItems.map((item) => {
-            if (item.requireAuth && !user) return null;
-            if (item.requireRole && (!user || !item.requireRole.includes(user.role))) return null;
-            return <NavItem key={item.id} item={item} />;
-          })}
-        </div>
+          </>
+        ) : (
+          /* Standard Citizen & Advocate Navigation */
+          <>
+            {/* Core Workspace */}
+            <div className="space-y-0.5">
+              {!collapsed && (
+                <div className="px-3 pb-2 flex items-center gap-2">
+                  <div className="h-px flex-1 bg-slate-800/80" />
+                  <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest whitespace-nowrap">
+                    Workspace
+                  </span>
+                  <div className="h-px flex-1 bg-slate-800/80" />
+                </div>
+              )}
+              {mainWorkspaceItems.map((item) => (
+                <NavItem key={item.id} item={item} />
+              ))}
+            </div>
+
+            {/* Secondary / Account */}
+            <div className="space-y-0.5">
+              {!collapsed && (
+                <div className="px-3 pb-2 flex items-center gap-2">
+                  <div className="h-px flex-1 bg-slate-800/80" />
+                  <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest whitespace-nowrap">
+                    Account
+                  </span>
+                  <div className="h-px flex-1 bg-slate-800/80" />
+                </div>
+              )}
+              {secondaryItems.map((item) => {
+                if (item.requireAuth && !user) return null;
+                if (item.requireRole && (!user || !item.requireRole.includes(user.role))) return null;
+                return <NavItem key={item.id} item={item} />;
+              })}
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── Bottom User Card ─────────────────────────────────── */}
@@ -201,13 +253,13 @@ export default function Sidebar({
           <div className={`flex items-center gap-3 p-2 rounded-xl bg-slate-900/60 border border-slate-800/80 ${collapsed ? 'justify-center' : ''}`}>
             {/* Gradient avatar */}
             <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${roleGrad[user.role] || 'from-blue-500 to-sky-400'} flex items-center justify-center text-white text-xs font-extrabold shadow-sm shrink-0`}>
-              {(user.profileData?.fullName || user.email).charAt(0).toUpperCase()}
+              {(user.profileData?.fullName || user.email || 'U').charAt(0).toUpperCase()}
             </div>
 
             {!collapsed && (
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-white truncate" title={user.email}>
-                  {user.profileData?.fullName || user.email}
+                <p className="text-xs font-bold text-white truncate" title={user.email || 'User'}>
+                  {user.profileData?.fullName || user.email || 'Authorized User'}
                 </p>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className="text-[9px] font-bold text-legal-gold bg-legal-gold/10 px-1.5 rounded uppercase tracking-wider">
@@ -232,7 +284,7 @@ export default function Sidebar({
         ) : (
           <button
             onClick={onOpenAuth}
-            className={`w-full py-2.5 px-3 btn-shimmer bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer`}
+            className="w-full py-2.5 px-3 btn-shimmer bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0" />
             {!collapsed && <span>Sign In / Register</span>}

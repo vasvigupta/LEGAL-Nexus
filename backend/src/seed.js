@@ -280,11 +280,13 @@ const lawyersData = [
   },
 ];
 
-async function seedDatabase() {
+async function seedDatabase(skipDisconnect = false) {
   try {
-    console.log('Connecting to MongoDB at:', MONGODB_URI);
-    await mongoose.connect(MONGODB_URI);
-    console.log('MongoDB Connected successfully.');
+    if (mongoose.connection.readyState === 0) {
+      console.log('Connecting to MongoDB at:', MONGODB_URI);
+      await mongoose.connect(MONGODB_URI);
+      console.log('MongoDB Connected successfully.');
+    }
 
     // 1. Create or Update Default Citizen User
     const citizenEmail = 'citizen@example.com';
@@ -383,21 +385,62 @@ async function seedDatabase() {
       }
     }
 
+    // Seed Default Admin Account
+    const adminEmail = 'admin@legalnexus.in';
+    const adminPasswordHash = await User.hashPassword('Password123!');
+    await User.findOneAndUpdate(
+      { email: adminEmail },
+      {
+        $set: {
+          email: adminEmail,
+          passwordHash: adminPasswordHash,
+          role: 'ADMIN',
+          phone: '9999999999',
+          isVerified: true,
+          isActive: true,
+        },
+      },
+      { upsert: true, new: true }
+    );
+    console.log(` [✓] Seeded Admin: ${adminEmail} (Role: ADMIN)`);
+
+    // Seed Default Test Citizen
+    const testCitizenEmail = 'testcitizen@nyayanexus.in';
+    const testCitizenPasswordHash = await User.hashPassword('Password123!');
+    await User.findOneAndUpdate(
+      { email: testCitizenEmail },
+      {
+        $set: {
+          email: testCitizenEmail,
+          passwordHash: testCitizenPasswordHash,
+          role: 'CITIZEN',
+          phone: '9876543210',
+          isVerified: true,
+          isActive: true,
+        },
+      },
+      { upsert: true, new: true }
+    );
+    console.log(` [✓] Seeded Citizen: ${testCitizenEmail} (Role: CITIZEN)`);
+
     console.log('\n======================================================');
     console.log('  LEGAL NEXUS — SEED DATA INITIALIZATION COMPLETE   ');
     console.log('======================================================');
-    console.log('Default Citizen Account:');
-    console.log('  Email:    citizen@example.com');
-    console.log('  Password: Password123!');
-    console.log('Lawyer Directory: 7 Verified Advocates & Legal Scholars Ready');
-    console.log('======================================================\n');
 
-    await mongoose.disconnect();
-    process.exit(0);
+    if (!skipDisconnect) {
+      await mongoose.disconnect();
+      process.exit(0);
+    }
   } catch (error) {
     console.error('Seed Error:', error);
-    process.exit(1);
+    if (!skipDisconnect) {
+      process.exit(1);
+    }
   }
 }
 
-seedDatabase();
+module.exports = { seedDatabase, lawyersData };
+
+if (require.main === module) {
+  seedDatabase(false);
+}

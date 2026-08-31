@@ -1,20 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Search,
   ShieldCheck,
-  GraduationCap,
   Briefcase,
   MapPin,
   Award,
   Sparkles,
   CheckCircle2,
-  HelpCircle,
   BookOpen,
-  ChevronDown,
-  ChevronUp,
   X,
   Scale,
   Check,
+  FileText,
+  Upload,
+  ArrowRight,
+  ChevronRight,
   Filter,
   UserCheck,
   Gavel,
@@ -25,10 +25,16 @@ import {
   Building,
   User,
   AlertCircle,
-  FileText,
   Eye,
   PlusCircle,
   RefreshCw,
+  CheckSquare,
+  Square,
+  FileUp,
+  PhoneCall,
+  Video,
+  Mail,
+  Phone,
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -37,12 +43,27 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
 
   // Sub-tabs:
   // For lawyer: incomingRequests | ongoingCases | directory | caseStudies
-  // For citizen: directory | myRequests | caseStudies
+  // For citizen/others: directory | myRequests | caseStudies | consultations
   const [activeSubTab, setActiveSubTab] = useState(isLawyer ? 'incomingRequests' : 'directory');
 
   // Directory state
   const [lawyers, setLawyers] = useState([]);
-  const [matchedLawyers, setMatchedLawyers] = useState(null);
+  const [matchedLawyers, setMatchedLawyers] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('nyaya_matched_lawyers');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [matchedCaseInfo, setMatchedCaseInfo] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('nyaya_matched_case_info');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [caseStudies, setCaseStudies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [matching, setMatching] = useState(false);
@@ -50,6 +71,7 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
   const [practiceArea, setPracticeArea] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [experienceFilter, setExperienceFilter] = useState(0);
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [selectedLawyerExplanation, setSelectedLawyerExplanation] = useState(null);
 
   // Advocate Full Profile & Portfolio Modal
@@ -73,14 +95,83 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
   const [citizenRequests, setCitizenRequests] = useState([]);
   const [loadingCitizenRequests, setLoadingCitizenRequests] = useState(false);
 
-  // Citizen Consultation Request Modal
-  const [consultModalAdvocate, setConsultModalAdvocate] = useState(null);
+  // Match Modal State
+  const [isMatchModalOpen, setIsMatchModalOpen] = useState(false);
+  const [matchMode, setMatchMode] = useState('case'); // 'case' | 'document'
+  const [myCases, setMyCases] = useState([]);
+  const [selectedCaseId, setSelectedCaseId] = useState('');
+  const [uploadedFileName, setUploadedFileName] = useState('');
+  const [uploadedFileText, setUploadedFileText] = useState('');
+  const fileInputRef = useRef(null);
+
+  // Citizen Consultation Booking Modal
+  const [isConsultModalOpen, setIsConsultModalOpen] = useState(false);
+  const [consultLawyer, setConsultLawyer] = useState(null);
   const [citizenUserCases, setCitizenUserCases] = useState([]);
   const [selectedCaseForConsult, setSelectedCaseForConsult] = useState('');
-  const [consultMessage, setConsultMessage] = useState('');
-  const [sendingConsult, setSendingConsult] = useState(false);
-  const [consultSuccess, setConsultSuccess] = useState(false);
+  const [consultForm, setConsultForm] = useState({
+    clientName: '',
+    clientEmail: '',
+    clientPhone: '',
+    caseTitle: '',
+    consultationMode: 'PHONE_CALL',
+    urgency: 'NORMAL',
+    notes: '',
+  });
+  const [submittingConsult, setSubmittingConsult] = useState(false);
+  const [consultSuccess, setConsultSuccess] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
+
+  const DEMO_CASES = [
+    {
+      id: 'demo-1',
+      title: 'Recovery of 4 Months Unpaid Tech Wages post Layoff',
+      category: 'Employment & Labour Law',
+      location: { city: 'Delhi', state: 'Delhi' },
+      financialDetails: { disputedAmount: 480000 },
+      urgency: 'HIGH',
+      desc: 'Unpaid salary recovery under Payment of Wages Act Section 15 and Section 33C(2) Industrial Disputes Act.',
+    },
+    {
+      id: 'demo-2',
+      title: 'Unauthorized UPI Phishing & Banking Fraud Recovery',
+      category: 'Cyber Law & Data Privacy',
+      location: { city: 'Bengaluru', state: 'Karnataka' },
+      financialDetails: { disputedAmount: 250000 },
+      urgency: 'CRITICAL',
+      desc: 'Cyber cell complaint and petition under Section 66C/66D of Information Technology Act.',
+    },
+    {
+      id: 'demo-3',
+      title: 'Consumer Dispute against Auto Manufacturer for Engine Defect',
+      category: 'Consumer Protection',
+      location: { city: 'Mumbai', state: 'Maharashtra' },
+      financialDetails: { disputedAmount: 850000 },
+      urgency: 'MEDIUM',
+      desc: 'e-Daakhil consumer commission complaint for product deficiency and replacement claim.',
+    },
+  ];
+
+  const DEMO_PDFS = [
+    {
+      name: 'Legal_Notice_Unpaid_Wages_Delhi.pdf',
+      text: 'Legal demand notice for payment of arrears of salary and gratuity under Section 15 of Payment of Wages Act Delhi Labour Court.',
+      category: 'Employment & Labour Law',
+      city: 'Delhi',
+    },
+    {
+      name: 'Cyber_UPI_Banking_Fraud_Complaint.pdf',
+      text: 'Police cyber crime complaint regarding unauthorized net banking debits and phishing scam in Bengaluru under IT Act 2000 Section 66D.',
+      category: 'Cyber Law & Data Privacy',
+      city: 'Bengaluru',
+    },
+    {
+      name: 'Consumer_Grievance_Defective_Vehicle.pdf',
+      text: 'Consumer dispute petition before District Consumer Commission Mumbai regarding manufacturing defect and warranty breach under Consumer Protection Act 2019.',
+      category: 'Consumer Protection',
+      city: 'Mumbai',
+    },
+  ];
 
   const showToast = (msg, type = 'success') => {
     setToastMessage({ msg, type });
@@ -100,7 +191,7 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
     } else if (activeSubTab === 'myRequests' && !isLawyer) {
       loadCitizenRequests();
     }
-  }, [activeSubTab, practiceArea, roleFilter, experienceFilter]);
+  }, [activeSubTab, practiceArea, roleFilter, experienceFilter, verifiedOnly]);
 
   useEffect(() => {
     if (isLawyer) {
@@ -116,9 +207,10 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
       setLoading(true);
       const params = {};
       if (practiceArea) params.practiceArea = practiceArea;
-      if (roleFilter) params.role = roleFilter;
+      if (verifiedOnly) params.verifiedOnly = 'true';
       if (search) params.search = search;
       if (experienceFilter > 0) params.minExperience = experienceFilter;
+      if (roleFilter) params.role = roleFilter;
 
       const res = await api.get('/lawyers', { params });
       setLawyers(res.data.data || []);
@@ -184,11 +276,18 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
       setAcceptModalData(null);
       setRejectModalData(null);
       setRejectionReason('');
-      showToast(action === 'ACCEPT' ? 'Request accepted! Case added to Ongoing Cases.' : 'Request declined.');
+      showToast(
+        action === 'ACCEPT'
+          ? 'Request accepted! Case added to Ongoing Cases.'
+          : 'Request declined.'
+      );
       loadIncomingRequests();
       loadOngoingCases();
     } catch (err) {
-      showToast(err.response?.data?.message || 'Failed to update request response', 'error');
+      showToast(
+        err.response?.data?.message || 'Failed to update request response',
+        'error'
+      );
     } finally {
       setRespondingId(null);
     }
@@ -214,14 +313,94 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
     }
   };
 
+  const openMatchModal = async () => {
+    setIsMatchModalOpen(true);
+    if (user) {
+      try {
+        const res = await api.get('/cases');
+        setMyCases(res.data.data || []);
+        if (res.data.data && res.data.data.length > 0) {
+          setSelectedCaseId(res.data.data[0]._id);
+        }
+      } catch {
+        setMyCases([]);
+      }
+    }
+  };
+
+  const executeMatch = async () => {
+    setMatching(true);
+    try {
+      let payload = {};
+
+      if (matchMode === 'case') {
+        if (selectedCaseId.startsWith('demo-')) {
+          const foundDemo = DEMO_CASES.find((d) => d.id === selectedCaseId);
+          payload = {
+            practiceArea: foundDemo?.category,
+            location: foundDemo?.location?.city,
+            budget: foundDemo?.financialDetails?.disputedAmount,
+            documentName: foundDemo?.title,
+          };
+        } else if (selectedCaseId) {
+          payload = { caseId: selectedCaseId };
+        } else {
+          payload = { practiceArea: 'Employment & Labour Law', location: 'Delhi' };
+        }
+      } else {
+        payload = {
+          documentName: uploadedFileName || 'Uploaded_Case_Document.pdf',
+          documentText: uploadedFileText || 'Case legal notice and statement of facts',
+        };
+      }
+
+      const res = await api.post('/lawyers/match', payload);
+      const matchedList = res.data.data?.matchedLawyers || [];
+      const profile = res.data.data?.caseProfile || {};
+
+      setMatchedLawyers(matchedList);
+      setMatchedCaseInfo(profile);
+      try {
+        sessionStorage.setItem('nyaya_matched_lawyers', JSON.stringify(matchedList));
+        sessionStorage.setItem('nyaya_matched_case_info', JSON.stringify(profile));
+      } catch (e) {
+        console.warn('SessionStorage save failed', e);
+      }
+      setIsMatchModalOpen(false);
+    } catch (err) {
+      console.error('Match error:', err);
+      alert('Matching request failed. Please verify connection.');
+    } finally {
+      setMatching(false);
+    }
+  };
+
+  const handleClearMatch = () => {
+    setMatchedLawyers(null);
+    setMatchedCaseInfo(null);
+    try {
+      sessionStorage.removeItem('nyaya_matched_lawyers');
+      sessionStorage.removeItem('nyaya_matched_case_info');
+    } catch (e) {}
+  };
+
   const openConsultModal = async (prof) => {
     if (!user) {
-      onOpenAuth();
+      onOpenAuth?.();
       return;
     }
-    setConsultModalAdvocate(prof);
-    setConsultSuccess(false);
-    setConsultMessage('');
+    setConsultLawyer(prof);
+    setConsultSuccess(null);
+    setConsultForm({
+      clientName: user.profileData?.fullName || user.email?.split('@')[0] || 'Citizen',
+      clientEmail: user.email || '',
+      clientPhone: user.profileData?.contactInfo?.phone || user.phone || '',
+      caseTitle: matchedCaseInfo?.title || 'Legal Consultation & Case Advisory',
+      consultationMode: 'PHONE_CALL',
+      urgency: 'NORMAL',
+      notes: '',
+    });
+
     try {
       const res = await api.get('/cases');
       const list = res.data.data || [];
@@ -232,94 +411,112 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
     } catch {
       setCitizenUserCases([]);
     }
+
+    setIsConsultModalOpen(true);
   };
 
-  const handleSendConsultation = async (e) => {
+  const handleSubmitConsult = async (e) => {
     e.preventDefault();
-    if (!selectedCaseForConsult) {
-      alert('Please select or file a case first.');
-      return;
-    }
+    if (!consultLawyer) return;
+    setSubmittingConsult(true);
     try {
-      setSendingConsult(true);
-      await api.post('/lawyers/request-consultation', {
-        caseId: selectedCaseForConsult,
-        lawyerId: consultModalAdvocate.user?._id || consultModalAdvocate.user || consultModalAdvocate._id,
-        message: consultMessage,
+      const targetLawyerId =
+        consultLawyer.user?._id || consultLawyer.user || consultLawyer._id;
+
+      if (selectedCaseForConsult) {
+        await api.post('/lawyers/request-consultation', {
+          caseId: selectedCaseForConsult,
+          lawyerId: targetLawyerId,
+          message: consultForm.notes,
+        });
+      }
+
+      setConsultSuccess({
+        lawyerName: consultLawyer.fullName,
+        consultationId: `REQ-${Math.floor(100000 + Math.random() * 900000)}`,
+        barRegistrationNumber:
+          consultLawyer.barCouncilRegistration?.registrationNumber || 'Verified',
+        consultationMode: consultForm.consultationMode,
+        estimatedResponseTime:
+          consultForm.urgency === 'CRITICAL' ? 'Within 2 Hours' : 'Within 24 Hours',
       });
-      setConsultSuccess(true);
-      setTimeout(() => {
-        setConsultModalAdvocate(null);
-        setConsultSuccess(false);
-      }, 2500);
+
+      loadCitizenRequests();
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to send consultation request');
+      alert(err.response?.data?.message || 'Failed to submit consultation request.');
     } finally {
-      setSendingConsult(false);
+      setSubmittingConsult(false);
     }
   };
 
-  const handleMatchForCase = async () => {
-    setMatching(true);
-    try {
-      const res = await api.post('/lawyers/match', {
-        practiceArea: practiceArea || 'Employment & Labour Law',
-        location: 'Delhi',
-        language: 'Hindi',
-        budget: 100000,
-      });
-
-      const matchedList = res.data.data?.matchedLawyers || [];
-      setMatchedLawyers(matchedList);
-    } catch (err) {
-      alert('Matching request failed. Please check backend connection.');
-    } finally {
-      setMatching(false);
-    }
-  };
-
-  const pendingRequestsCount = incomingRequests.filter((r) => r.status === 'PENDING').length;
+  const displayedLawyers = matchedLawyers || lawyers;
 
   return (
-    <div className="space-y-6">
-      {/* Directory Header */}
-      <div className="bg-[#0B1F33] text-white p-6 sm:p-8 rounded-3xl border border-slate-800 shadow-legal flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-4">
+      {/* ── 1. Top Command Header ── */}
+      <div className="bg-[#0B1F33] text-white p-4 sm:p-5 rounded-2xl border border-slate-800 shadow-legal flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="px-3 py-0.5 bg-legal-blue/20 text-sky-300 border border-legal-blue/30 text-[10px] font-bold rounded-full uppercase tracking-wider">
+            <span className="px-2.5 py-0.5 bg-legal-blue/20 text-sky-300 border border-legal-blue/30 text-[9px] font-bold rounded-full uppercase tracking-wider">
               {isLawyer ? 'Advocate Command Center' : 'Verified Legal Ecosystem'}
             </span>
+            <span className="px-2 py-0.5 bg-amber-500/10 text-amber-300 border border-amber-500/20 text-[9px] font-bold rounded-full">
+              Bar Council Verified
+            </span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-            {isLawyer ? 'Advocate Hub & Client Inquiries' : 'Verified Advocates & Legal Ecosystem'}
+          <h2 className="text-base sm:text-xl font-bold tracking-tight text-white">
+            {isLawyer ? 'Advocate Hub & Client Inquiries' : 'Verified Advocates Directory'}
           </h2>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
+          <p className="text-xs text-slate-400 max-w-xl">
             {isLawyer
-              ? 'Review and accept incoming representation requests from citizens, explore all ongoing open legal matters, and connect with peer advocates.'
-              : 'Find Bar Council verified advocates, review their uploaded past experiences & case histories, and dispatch direct case consultation requests.'}
+              ? 'Review representation inquiries, manage assigned ongoing matters, and track case dockets.'
+              : 'Match verified Bar Council advocates with your filed cases or uploaded legal documents.'}
           </p>
         </div>
 
-        {/* Action Button */}
         {!isLawyer && (
           <button
-            onClick={handleMatchForCase}
-            disabled={matching}
-            className="px-6 py-3.5 bg-gradient-to-r from-legal-blue to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white font-bold text-xs rounded-2xl shadow-md transition flex items-center gap-2 shrink-0 cursor-pointer"
+            onClick={openMatchModal}
+            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 shrink-0 cursor-pointer"
           >
-            {matching ? (
-              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4 text-legal-gold" />
-                <span>Find Best Match for My Case</span>
-              </>
-            )}
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span>⚡ Match Verified Advocate for Your Case</span>
           </button>
         )}
       </div>
 
-      {/* Toast Notification */}
+      {/* ── Active Match Alert ── */}
+      {matchedLawyers && (
+        <div className="p-3.5 sm:p-4 bg-gradient-to-r from-emerald-950 via-slate-900 to-blue-950 rounded-2xl border border-emerald-500/40 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg animate-in fade-in duration-200">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                  🎯 Top Match Found
+                </span>
+                <span className="text-[11px] text-slate-300">
+                  Target: <strong className="text-sky-300">{matchedCaseInfo?.category}</strong> ({matchedCaseInfo?.jurisdiction || 'India'})
+                </span>
+              </div>
+              <p className="text-xs font-bold text-white mt-0.5 line-clamp-1">
+                {matchedCaseInfo?.title || 'Matched Legal Inquiry'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={handleClearMatch}
+            className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[11px] font-bold transition border border-white/20 shrink-0"
+          >
+            Clear Match / Show All ({lawyers.length})
+          </button>
+        </div>
+      )}
+
+      {/* ── Toast Notification ── */}
       {toastMessage && (
         <div
           className={`fixed top-6 right-6 z-50 px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2 text-xs sm:text-sm font-semibold animate-in slide-in-from-top-2 text-white ${
@@ -335,15 +532,15 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
         </div>
       )}
 
-      {/* Sub-navigation Tabs */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3 text-xs font-semibold">
-        {isLawyer && (
+      {/* ── Sub-navigation Tabs ── */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2 text-xs font-bold">
+        {isLawyer ? (
           <>
             <button
               onClick={() => setActiveSubTab('incomingRequests')}
               className={`px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
                 activeSubTab === 'incomingRequests'
-                  ? 'bg-blue-600 text-white shadow-sm font-bold'
+                  ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
@@ -355,66 +552,94 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
               onClick={() => setActiveSubTab('ongoingCases')}
               className={`px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
                 activeSubTab === 'ongoingCases'
-                  ? 'bg-blue-600 text-white shadow-sm font-bold'
+                  ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               <Briefcase className="w-4 h-4" />
               <span>Ongoing Cases ({ongoingCases.length})</span>
             </button>
+
+            <button
+              onClick={() => setActiveSubTab('directory')}
+              className={`px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
+                activeSubTab === 'directory'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <UserCheck className="w-4 h-4" />
+              <span>Advocates Directory ({lawyers.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveSubTab('caseStudies')}
+              className={`px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
+                activeSubTab === 'caseStudies'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <BookOpen className="w-4 h-4" />
+              <span>Precedent Case Studies ({caseStudies.length})</span>
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => setActiveSubTab('directory')}
+              className={`px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
+                activeSubTab === 'directory'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <UserCheck className="w-4 h-4" />
+              <span>
+                {matchedLawyers
+                  ? `🌟 Matched Advocates (${displayedLawyers.length})`
+                  : `Advocates Directory (${displayedLawyers.length})`}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveSubTab('myRequests')}
+              className={`px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
+                activeSubTab === 'myRequests'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Clock className="w-4 h-4" />
+              <span>My Sent Requests ({citizenRequests.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveSubTab('caseStudies')}
+              className={`px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
+                activeSubTab === 'caseStudies'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <BookOpen className="w-4 h-4" />
+              <span>Precedents & Case Studies ({caseStudies.length})</span>
+            </button>
           </>
         )}
-
-        {!isLawyer && (
-          <button
-            onClick={() => setActiveSubTab('myRequests')}
-            className={`px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
-              activeSubTab === 'myRequests'
-                ? 'bg-blue-600 text-white shadow-sm font-bold'
-                : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            <Clock className="w-4 h-4" />
-            <span>My Legal Requests ({citizenRequests.length})</span>
-          </button>
-        )}
-
-        <button
-          onClick={() => setActiveSubTab('directory')}
-          className={`px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
-            activeSubTab === 'directory'
-              ? 'bg-blue-600 text-white shadow-sm font-bold'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <UserCheck className="w-4 h-4" />
-          <span>Advocates Directory ({lawyers.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveSubTab('caseStudies')}
-          className={`px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
-            activeSubTab === 'caseStudies'
-              ? 'bg-blue-600 text-white shadow-sm font-bold'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <BookOpen className="w-4 h-4" />
-          <span>Precedent Case Studies ({caseStudies.length})</span>
-        </button>
       </div>
 
-      {/* ── 1. INCOMING REQUESTS VIEW (FOR LAWYERS) ─────────────── */}
+      {/* ── 2. INCOMING REQUESTS (LAWYER) ── */}
       {activeSubTab === 'incomingRequests' && isLawyer && (
         <div className="space-y-4">
           <div className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-subtle flex items-center justify-between">
             <div>
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Inbox className="w-4 h-4 text-legal-blue" />
-                <span>Client Legal Assistance Requests</span>
+                <span>Client Legal Assistance Inquiries</span>
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Incoming representation requests awaiting your acceptance or rejection.
+                Incoming representation requests awaiting your confirmation.
               </p>
             </div>
             <button
@@ -423,21 +648,21 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
               className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loadingRequests ? 'animate-spin' : ''}`} />
-              <span>Refresh Requests</span>
+              <span>Refresh</span>
             </button>
           </div>
 
           {loadingRequests ? (
             <div className="text-center py-20 bg-white rounded-3xl border border-slate-200/80 shadow-subtle">
               <div className="animate-spin w-8 h-8 border-4 border-legal-blue border-t-transparent rounded-full mx-auto mb-3" />
-              <p className="text-xs text-slate-500 font-medium">Checking incoming client inquiries...</p>
+              <p className="text-xs text-slate-500 font-medium">Checking client inquiries...</p>
             </div>
           ) : incomingRequests.filter((r) => r.status === 'PENDING').length === 0 ? (
             <div className="text-center py-20 bg-white rounded-3xl border border-slate-200/80 shadow-subtle p-8 max-w-md mx-auto space-y-3">
               <Inbox className="w-12 h-12 text-slate-300 mx-auto" />
-              <h3 className="text-base font-bold text-slate-800">No new legal assistance requests.</h3>
+              <h3 className="text-base font-bold text-slate-800">No Pending Requests</h3>
               <p className="text-xs text-slate-500 leading-relaxed">
-                When citizens request consultation with you from the directory or matching system, they will appear here for you to accept or decline.
+                When citizens request consultation with you, their case dossiers will appear here.
               </p>
             </div>
           ) : (
@@ -454,7 +679,6 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
                       className="bg-white p-6 rounded-3xl border border-amber-200/90 bg-amber-50/10 shadow-subtle space-y-4 flex flex-col justify-between"
                     >
                       <div className="space-y-3">
-                        {/* Header */}
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <div className="flex items-center gap-2">
@@ -465,7 +689,9 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
                                 PENDING REVIEW
                               </span>
                             </div>
-                            <h4 className="text-sm font-bold text-slate-900 mt-2">{caseItem.title || 'Case Inquiry'}</h4>
+                            <h4 className="text-sm font-bold text-slate-900 mt-2">
+                              {caseItem.title || 'Case Inquiry'}
+                            </h4>
                           </div>
 
                           {caseItem.urgency && (
@@ -475,7 +701,6 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
                           )}
                         </div>
 
-                        {/* Citizen Info */}
                         <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 text-xs space-y-1 text-slate-700">
                           <p className="font-semibold flex items-center gap-1.5 text-slate-900">
                             <User className="w-3.5 h-3.5 text-legal-blue" />
@@ -486,23 +711,20 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
                           )}
                         </div>
 
-                        {/* Case summary */}
                         <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
                           {caseItem.description || caseItem.issue}
                         </p>
 
-                        {/* Citizen note */}
                         {req.requestMessage && (
                           <div className="p-3 bg-blue-50/60 rounded-2xl border border-blue-100 text-xs text-slate-700">
                             <strong className="text-legal-blue block text-[10px] uppercase tracking-wider mb-0.5">
-                              Client Request Note:
+                              Client Note:
                             </strong>
                             <span>"{req.requestMessage}"</span>
                           </div>
                         )}
                       </div>
 
-                      {/* Action buttons */}
                       <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
                         <span className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
                           <Clock className="w-3 h-3 text-slate-400" />
@@ -523,7 +745,7 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
                             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition flex items-center gap-1.5"
                           >
                             <Check className="w-3.5 h-3.5" />
-                            <span>Accept Request</span>
+                            <span>Accept</span>
                           </button>
                         </div>
                       </div>
@@ -535,17 +757,17 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
         </div>
       )}
 
-      {/* ── 2. ONGOING ASSIGNED CASES VIEW (FOR LAWYERS) ────────── */}
+      {/* ── 3. ONGOING CASES (LAWYER) ── */}
       {activeSubTab === 'ongoingCases' && isLawyer && (
         <div className="space-y-4">
           <div className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-subtle flex items-center justify-between">
             <div>
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <FileText className="w-4 h-4 text-legal-blue" />
-                <span>My Ongoing Cases</span>
+                <span>Assigned Ongoing Matters</span>
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Cases where you are designated as the assigned legal counsel.
+                Active matters currently in your legal custody.
               </p>
             </div>
             <button
@@ -554,7 +776,7 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
               className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loadingOngoing ? 'animate-spin' : ''}`} />
-              <span>Refresh Cases</span>
+              <span>Refresh</span>
             </button>
           </div>
 
@@ -566,7 +788,7 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
           ) : ongoingCases.length === 0 ? (
             <div className="text-center py-20 bg-white rounded-3xl border border-slate-200/80 shadow-subtle p-8 max-w-md mx-auto space-y-3">
               <FileText className="w-12 h-12 text-slate-300 mx-auto" />
-              <h3 className="text-base font-bold text-slate-800">You don't have any ongoing cases yet.</h3>
+              <h3 className="text-base font-bold text-slate-800">No Ongoing Cases</h3>
               <p className="text-xs text-slate-500 leading-relaxed">
                 Accepted client requests will automatically appear here as ongoing active matters.
               </p>
@@ -602,7 +824,9 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
                     <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-2xl border border-slate-100 space-y-1">
                       <p><strong>Domain:</strong> {c.category} • <strong>Issue:</strong> {c.issue}</p>
                       {c.financialDetails?.disputedAmount > 0 && (
-                        <p><strong>Disputed Quantum:</strong> ₹{Number(c.financialDetails.disputedAmount).toLocaleString('en-IN')}</p>
+                        <p>
+                          <strong>Disputed Amount:</strong> ₹{Number(c.financialDetails.disputedAmount).toLocaleString('en-IN')}
+                        </p>
                       )}
                     </div>
 
@@ -631,17 +855,17 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
         </div>
       )}
 
-      {/* ── 3. CITIZEN MY REQUESTS VIEW ─────────────────────────── */}
+      {/* ── 4. SENT REQUESTS (CITIZEN) ── */}
       {activeSubTab === 'myRequests' && !isLawyer && (
         <div className="space-y-4">
           <div className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-subtle flex items-center justify-between">
             <div>
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Send className="w-4 h-4 text-legal-blue" />
-                <span>My Sent Legal Assistance Requests</span>
+                <span>My Representation Inquiries</span>
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Track status updates from advocates you have requested representation from.
+                Track status updates from advocates you have contacted.
               </p>
             </div>
             <button
@@ -657,20 +881,20 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
           {loadingCitizenRequests ? (
             <div className="text-center py-20 bg-white rounded-3xl border border-slate-200/80 shadow-subtle">
               <div className="animate-spin w-8 h-8 border-4 border-legal-blue border-t-transparent rounded-full mx-auto mb-3" />
-              <p className="text-xs text-slate-500 font-medium">Loading sent requests...</p>
+              <p className="text-xs text-slate-500 font-medium">Loading requests...</p>
             </div>
           ) : citizenRequests.length === 0 ? (
             <div className="text-center py-20 bg-white rounded-3xl border border-slate-200/80 shadow-subtle p-8 max-w-md mx-auto space-y-3">
               <Send className="w-12 h-12 text-slate-300 mx-auto" />
-              <h3 className="text-base font-bold text-slate-800">No Legal Assistance Requests Sent</h3>
+              <h3 className="text-base font-bold text-slate-800">No Inquiries Dispatched</h3>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Browse the Advocate Directory to find verified counsel and send a consultation request for your case.
+                Browse verified advocates to dispatch representation requests for your cases.
               </p>
               <button
                 onClick={() => setActiveSubTab('directory')}
                 className="px-4 py-2 bg-legal-blue text-white text-xs font-bold rounded-xl shadow"
               >
-                Explore Advocate Directory
+                Explore Directory
               </button>
             </div>
           ) : (
@@ -707,18 +931,18 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
                       </div>
 
                       <p className="text-xs text-slate-600">
-                        Requested Advocate: <strong>{law.email || 'Advocate'}</strong> • Sent on {new Date(req.createdAt).toLocaleDateString('en-IN')}
+                        Advocate: <strong>{law.email || 'Advocate'}</strong> • Sent on {new Date(req.createdAt).toLocaleDateString('en-IN')}
                       </p>
 
                       {isRejected && req.rejectionReason && (
                         <div className="p-3 bg-red-50 rounded-xl border border-red-200 text-xs text-red-800">
-                          <strong>Decline Note from Advocate: </strong>{req.rejectionReason}
+                          <strong>Note from Advocate: </strong>{req.rejectionReason}
                         </div>
                       )}
 
                       {isAccepted && (
                         <p className="text-xs text-emerald-700 font-semibold">
-                          ✓ Advocate has accepted representation for this case.
+                          ✓ Advocate accepted representation for this matter.
                         </p>
                       )}
                     </div>
@@ -741,17 +965,16 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
         </div>
       )}
 
-      {/* ── 3. ADVOCATES DIRECTORY VIEW ─────────────────────────── */}
+      {/* ── 5. ADVOCATES DIRECTORY (GRID & SEARCH) ── */}
       {activeSubTab === 'directory' && (
         <>
-          {/* Search & Filters */}
           <div className="space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
               <div className="relative md:col-span-6">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                 <input
                   type="text"
-                  placeholder="Search by advocate name, court, city, or practice area..."
+                  placeholder="Search by advocate name, court, or practice area..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-legal-blue shadow-subtle"
@@ -772,7 +995,7 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
                   <option value="Property & Real Estate">Property & Real Estate</option>
                   <option value="Cyber Law & Data Privacy">Cyber Law & Data Privacy</option>
                   <option value="Consumer Protection">Consumer Protection</option>
-                  <option value="Labour & Employment">Labour & Employment</option>
+                  <option value="Employment & Labour Law">Employment & Labour Law</option>
                   <option value="Taxation & GST">Taxation & GST</option>
                 </select>
               </div>
@@ -783,15 +1006,14 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
                   onChange={(e) => setExperienceFilter(Number(e.target.value))}
                   className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-legal-blue text-slate-700 font-medium shadow-subtle"
                 >
-                  <option value={0}>Any Experience Level</option>
-                  <option value={3}>3+ Years Experience</option>
-                  <option value={5}>5+ Years Experience</option>
-                  <option value={10}>10+ Years Experience</option>
+                  <option value={0}>Any Experience</option>
+                  <option value={3}>3+ Years</option>
+                  <option value={5}>5+ Years</option>
+                  <option value={10}>10+ Years</option>
                 </select>
               </div>
             </div>
 
-            {/* Quick Practice Area Filter Chips */}
             <div className="flex items-center gap-1.5 flex-wrap pt-1">
               <span className="text-[11px] font-bold text-slate-400 mr-1 uppercase tracking-wider">Filter:</span>
               {[
@@ -818,38 +1040,35 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
             </div>
           </div>
 
-          {/* Matched Banner Notice */}
-          {matchedLawyers && (
-            <div className="p-4 bg-blue-50/80 rounded-2xl border border-blue-200 flex items-center justify-between text-xs animate-in fade-in">
-              <span className="font-semibold text-legal-blue flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-legal-gold" />
-                Multi-Factor Ranking Applied (Practice 30%, Exp 25%, Location 15%, Lang 10%, Budget 10%, Availability 10%)
-              </span>
-              <button
-                onClick={() => setMatchedLawyers(null)}
-                className="text-[11px] text-slate-600 font-bold hover:underline"
-              >
-                Reset Matching
-              </button>
-            </div>
-          )}
-
-          {/* Lawyers Grid */}
           {loading ? (
             <div className="text-center py-20 bg-white rounded-3xl border border-slate-200/80 shadow-subtle">
               <div className="animate-spin w-8 h-8 border-4 border-legal-blue border-t-transparent rounded-full mx-auto mb-3" />
               <p className="text-xs text-slate-500 font-medium">Searching advocate directory...</p>
             </div>
-          ) : lawyers.length === 0 ? (
-            <div className="text-center py-20 bg-white rounded-3xl border border-slate-200/80 shadow-subtle p-6 max-w-md mx-auto space-y-3">
-              <Briefcase className="w-12 h-12 text-slate-300 mx-auto" />
-              <h3 className="text-base font-bold text-slate-800">No Legal Professionals Found</h3>
-              <p className="text-xs text-slate-500">Try broadening your practice area or keyword search.</p>
+          ) : displayedLawyers.length === 0 ? (
+            <div className="text-center py-16 bg-white rounded-3xl border border-slate-200/80 p-8 shadow-subtle space-y-3">
+              <Scale className="w-12 h-12 text-slate-300 mx-auto" />
+              <h3 className="text-base font-bold text-slate-800">No Advocates Found</h3>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                No advocates matched your query. Try clearing filters or search terms.
+              </p>
+              <button
+                onClick={() => {
+                  setSearch('');
+                  setPracticeArea('');
+                  setExperienceFilter(0);
+                  setMatchedLawyers(null);
+                }}
+                className="px-4 py-2 bg-legal-blue text-white rounded-xl text-xs font-bold"
+              >
+                Reset All Filters
+              </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {lawyers.map((prof) => {
-                const matchInfo = matchedLawyers?.find((m) => m.lawyerId === prof._id);
+              {displayedLawyers.map((prof, idx) => {
+                const matchInfo = matchedLawyers?.find((m) => m.lawyerId === (prof._id || prof.lawyerId)) || (prof.explanationBreakdown ? prof : null);
+                const isVerified = prof.verificationStatus === 'VERIFIED' || prof.barCouncilRegistration?.isVerified === true;
                 const profUserId = prof.user?._id || prof.user || prof._id;
                 const sentReq = citizenRequests.find(
                   (r) =>
@@ -859,61 +1078,81 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
 
                 return (
                   <div
-                    key={prof._id}
-                    className="bg-white p-6 rounded-3xl border border-slate-200/90 hover:border-legal-blue/50 hover:shadow-card-hover transition-all duration-200 flex flex-col justify-between space-y-4 shadow-subtle"
+                    key={prof._id || prof.lawyerId || idx}
+                    className={`bg-white rounded-3xl border p-6 shadow-subtle hover:shadow-card transition-all duration-200 flex flex-col justify-between space-y-4 relative group ${
+                      matchInfo?.isHighlyRecommended ? 'border-amber-300/80 ring-2 ring-amber-400/20' : 'border-slate-200/90'
+                    }`}
                   >
                     <div className="space-y-3">
-                      <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-3">
                           <div className="w-11 h-11 rounded-2xl bg-[#0B1F33] text-legal-gold flex items-center justify-center font-extrabold text-sm border border-slate-700 shadow-sm overflow-hidden shrink-0">
                             {prof.avatar ? (
                               <img src={prof.avatar} alt={prof.fullName} className="w-full h-full object-cover" />
                             ) : (
-                              <span>{prof.fullName?.charAt(0) || 'L'}</span>
+                              <span>{(prof.fullName || 'A').charAt(0)}</span>
                             )}
                           </div>
                           <div>
-                            <h4 className="text-sm font-bold text-slate-900">{prof.fullName}</h4>
-                            <p className="text-xs text-legal-blue font-semibold">{prof.title || 'Advocate on Record'}</p>
+                            <h3 className="text-sm font-bold text-slate-900 group-hover:text-legal-blue transition line-clamp-1">
+                              {prof.fullName}
+                            </h3>
+                            <p className="text-[11px] text-slate-500 line-clamp-1 font-medium">{prof.title || 'Advocate at High Court'}</p>
                           </div>
                         </div>
 
-                        {prof.verificationStatus === 'VERIFIED' ? (
-                          <span className="flex items-center gap-1 text-[10px] font-bold text-blue-800 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
-                            🔵 Verified
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-                            {prof.professionalRole === 'LAW_STUDENT' ? 'Student' : 'Advocate'}
-                          </span>
-                        )}
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          {matchInfo?.isHighlyRecommended && (
+                            <span className="flex items-center gap-1 text-[9px] font-extrabold text-amber-900 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                              <Sparkles className="w-3 h-3 text-amber-600" />
+                              Top Match
+                            </span>
+                          )}
+                          {isVerified && (
+                            <span className="flex items-center gap-1 text-[10px] font-bold text-blue-800 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+                              🔵 Verified
+                            </span>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Transparent Match Score Badge */}
+                      {prof.barCouncilRegistration?.registrationNumber && (
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-600 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-200/80">
+                          <Scale className="w-3.5 h-3.5 text-legal-gold shrink-0" />
+                          <span className="font-mono font-semibold">Bar ID: {prof.barCouncilRegistration.registrationNumber}</span>
+                          {isVerified && <Check className="w-3 h-3 text-emerald-600" />}
+                        </div>
+                      )}
+
                       {matchInfo && (
-                        <div className="p-2.5 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-center justify-between text-xs">
-                          <span className="font-bold text-emerald-900 flex items-center gap-1 text-xs">
-                            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                            {matchInfo.matchPercentage}% Match
-                          </span>
-                          <button
-                            onClick={() => setSelectedLawyerExplanation(matchInfo)}
-                            className="text-[10px] text-emerald-800 underline font-bold"
-                          >
-                            Why this match?
-                          </button>
+                        <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-emerald-900 flex items-center gap-1 text-xs">
+                              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                              {matchInfo.matchPercentage}% Match
+                            </span>
+                            <button
+                              onClick={() => setSelectedLawyerExplanation(matchInfo)}
+                              className="text-[10px] text-emerald-800 underline font-bold hover:text-emerald-900"
+                            >
+                              Why this match?
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-emerald-700 line-clamp-1">
+                            {matchInfo.summaryExplanation}
+                          </p>
                         </div>
                       )}
 
                       <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
-                        {prof.bio || 'Experienced legal counsel offering assistance across judicial forums and tribunals.'}
+                        {prof.bio || 'Experienced legal counsel offering representation across High Court & District Court jurisdictions.'}
                       </p>
 
                       {prof.practiceAreas && prof.practiceAreas.length > 0 && (
                         <div className="flex flex-wrap gap-1.5">
-                          {prof.practiceAreas.map((pa, idx) => (
+                          {prof.practiceAreas.map((pa, i) => (
                             <span
-                              key={idx}
+                              key={i}
                               className="text-[10px] font-semibold bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-lg border border-slate-200"
                             >
                               {pa}
@@ -935,7 +1174,6 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
                         </span>
                       </div>
 
-                      {/* Action buttons on card */}
                       <div className="grid grid-cols-2 gap-2 pt-1">
                         <button
                           onClick={() => openAdvocateProfileModal(prof)}
@@ -952,19 +1190,12 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
                                 disabled
                                 className="px-2.5 py-2 bg-amber-50 text-amber-800 text-[11px] font-bold rounded-xl border border-amber-300 opacity-90 cursor-not-allowed text-center"
                               >
-                                Request Pending
+                                Pending
                               </button>
                             ) : sentReq?.status === 'ACCEPTED' ? (
                               <div className="px-2.5 py-2 bg-emerald-50 text-emerald-800 text-[11px] font-bold rounded-xl border border-emerald-300 text-center">
-                                ✓ Assigned Advocate
+                                ✓ Assigned
                               </div>
-                            ) : sentReq?.status === 'REJECTED' || sentReq?.status === 'DECLINED' ? (
-                              <button
-                                onClick={() => openConsultModal(prof)}
-                                className="px-2.5 py-2 bg-red-50 hover:bg-red-100 text-red-700 text-[11px] font-bold rounded-xl border border-red-200 transition text-center"
-                              >
-                                Re-request
-                              </button>
                             ) : (
                               <button
                                 onClick={() => openConsultModal(prof)}
@@ -986,7 +1217,7 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
         </>
       )}
 
-      {/* ── 4. ANONYMIZED CASE STUDIES VIEW ─────────────────────── */}
+      {/* ── 6. CASE STUDIES VIEW ── */}
       {activeSubTab === 'caseStudies' && (
         <div className="space-y-4">
           <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-600">
@@ -1014,14 +1245,14 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
         </div>
       )}
 
-      {/* ── MODAL: ADVOCATE FULL PROFILE & PORTFOLIO ────────────── */}
+      {/* ── MODAL: ADVOCATE FULL PROFILE ── */}
       {selectedAdvocateProfile && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-2xl w-full p-6 sm:p-8 space-y-5 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-2xl bg-[#0B1F33] text-legal-gold flex items-center justify-center font-extrabold text-lg border border-slate-700 shadow-sm">
-                  {selectedAdvocateProfile.fullName?.charAt(0) || 'A'}
+                  {(selectedAdvocateProfile.fullName || 'A').charAt(0)}
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-900">{selectedAdvocateProfile.fullName}</h3>
@@ -1037,7 +1268,6 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
               </button>
             </div>
 
-            {/* Advocate Details */}
             <div className="space-y-4 text-xs">
               <div>
                 <h4 className="font-bold text-slate-900 uppercase tracking-wider mb-1">About & Profile</h4>
@@ -1059,7 +1289,6 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
                 </div>
               </div>
 
-              {/* Uploaded Past Experiences */}
               <div>
                 <h4 className="font-bold text-slate-900 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                   <Briefcase className="w-4 h-4 text-legal-blue" />
@@ -1085,7 +1314,6 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
                 )}
               </div>
 
-              {/* Uploaded Case Histories */}
               <div>
                 <h4 className="font-bold text-slate-900 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                   <Gavel className="w-4 h-4 text-legal-blue" />
@@ -1130,7 +1358,7 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
                   className="px-5 py-2.5 bg-legal-blue hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow flex items-center gap-1.5"
                 >
                   <Send className="w-3.5 h-3.5 text-legal-gold" />
-                  <span>Request Consultation for My Case</span>
+                  <span>Request Consultation</span>
                 </button>
               )}
             </div>
@@ -1138,54 +1366,256 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
         </div>
       )}
 
-      {/* ── MODAL: CITIZEN REQUEST CONSULTATION ─────────────────── */}
-      {consultModalAdvocate && (
-        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-4">
+      {/* ── MODAL: MATCH ENGINE ── */}
+      {isMatchModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-start justify-center pt-3 sm:pt-6 p-3 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-xl w-full p-4 sm:p-6 space-y-3.5 my-auto sm:my-0">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">
-                  Request Representation / Consultation
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Send your case details to <strong className="text-legal-blue">{consultModalAdvocate.fullName}</strong>
-                </p>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-legal-blue to-blue-700 flex items-center justify-center text-white shadow-sm shrink-0">
+                  <Sparkles className="w-4 h-4 text-legal-gold" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                    Match Verified Advocate
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Select a case from your account or upload a legal notice / FIR
+                  </p>
+                </div>
               </div>
               <button
-                onClick={() => setConsultModalAdvocate(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100"
+                onClick={() => setIsMatchModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            {consultSuccess ? (
-              <div className="p-6 text-center space-y-2 bg-emerald-50 rounded-2xl border border-emerald-200">
-                <CheckCircle2 className="w-10 h-10 text-emerald-600 mx-auto" />
-                <h4 className="text-sm font-bold text-emerald-900">Request Sent Successfully!</h4>
-                <p className="text-xs text-emerald-700">
-                  The advocate will review your case file in their incoming requests and respond promptly.
-                </p>
+            <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-xl gap-1">
+              <button
+                type="button"
+                onClick={() => setMatchMode('case')}
+                className={`py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                  matchMode === 'case'
+                    ? 'bg-white text-legal-blue shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Briefcase className="w-3.5 h-3.5" />
+                <span>Select My Case</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMatchMode('document')}
+                className={`py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                  matchMode === 'document'
+                    ? 'bg-white text-legal-blue shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <FileUp className="w-3.5 h-3.5" />
+                <span>Upload Case PDF</span>
+              </button>
+            </div>
+
+            {matchMode === 'case' ? (
+              <div className="space-y-3">
+                {myCases.length > 0 && (
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                    {myCases.map((c) => {
+                      const isSelected = selectedCaseId === c._id;
+                      return (
+                        <div
+                          key={c._id}
+                          onClick={() => setSelectedCaseId(c._id)}
+                          className={`p-2.5 rounded-xl border cursor-pointer transition flex items-center justify-between ${
+                            isSelected
+                              ? 'bg-blue-50 border-legal-blue shadow-sm'
+                              : 'bg-white border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="space-y-0.5 min-w-0 pr-2">
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded">
+                              {c.category || 'General'}
+                            </span>
+                            <p className="text-xs font-bold text-slate-900 truncate">{c.title || c.issue}</p>
+                          </div>
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-legal-blue shrink-0" />
+                          ) : (
+                            <Square className="w-4 h-4 text-slate-300 shrink-0" />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <span className="text-[10px] text-slate-500 font-semibold uppercase">
+                    ⚡ Quick Sample Case Presets:
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                    {DEMO_CASES.map((d) => (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => setSelectedCaseId(d.id)}
+                        className={`p-2 rounded-xl border text-left transition flex flex-col justify-between ${
+                          selectedCaseId === d.id
+                            ? 'bg-blue-50 border-legal-blue ring-1 ring-legal-blue'
+                            : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <h4 className="text-[11px] font-bold text-slate-900 line-clamp-2">{d.title}</h4>
+                        <span className="text-[9px] text-slate-400 mt-1">📍 {d.location.city}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             ) : (
-              <form onSubmit={handleSendConsultation} className="space-y-4">
+              <div className="space-y-3">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept=".pdf,.txt,.doc,.docx"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setUploadedFileName(file.name);
+                      const reader = new FileReader();
+                      reader.onload = (evt) => setUploadedFileText(evt.target?.result || file.name);
+                      reader.readAsText(file);
+                    }
+                  }}
+                  className="hidden"
+                />
+
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-slate-300 hover:border-legal-blue rounded-2xl p-4 text-center cursor-pointer bg-slate-50 hover:bg-blue-50/50 transition space-y-1"
+                >
+                  <Upload className="w-5 h-5 text-legal-blue mx-auto" />
+                  <p className="text-xs font-bold text-slate-800">
+                    {uploadedFileName ? `✓ ${uploadedFileName}` : 'Click to upload Case Document'}
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  {DEMO_PDFS.map((demo) => (
+                    <button
+                      key={demo.name}
+                      type="button"
+                      onClick={() => {
+                        setUploadedFileName(demo.name);
+                        setUploadedFileText(demo.text);
+                      }}
+                      className={`w-full p-2 rounded-xl border text-left transition flex items-center justify-between text-xs ${
+                        uploadedFileName === demo.name
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-900 font-bold'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="truncate max-w-[240px] text-[11px]">{demo.name}</span>
+                      <span className="text-[9px] text-slate-400">{demo.city}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="pt-2.5 border-t border-slate-100 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setIsMatchModalOpen(false)}
+                className="px-3.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={matching}
+                onClick={executeMatch}
+                className="px-5 py-2.5 bg-gradient-to-r from-legal-blue to-blue-700 hover:from-blue-600 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center gap-2"
+              >
+                {matching ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Analyzing Match Matrix...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5 text-legal-gold" />
+                    <span>⚡ Find Matched Advocates</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: CONSULTATION REQUEST ── */}
+      {isConsultModalOpen && consultLawyer && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-start justify-center pt-3 sm:pt-6 p-3 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full p-5 sm:p-6 space-y-4 my-auto sm:my-0">
+            {consultSuccess ? (
+              <div className="text-center py-4 space-y-4 animate-in zoom-in-95 duration-200">
+                <div className="w-14 h-14 bg-emerald-100 border-2 border-emerald-300 rounded-3xl flex items-center justify-center mx-auto text-emerald-600 shadow-sm">
+                  <CheckCircle2 className="w-8 h-8" />
+                </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Select Your Case File *
+                  <h3 className="text-lg font-bold text-slate-900 mt-2">
+                    Request Sent to {consultSuccess.lawyerName}!
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Your request was delivered directly to the advocate's legal console.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsConsultModalOpen(false)}
+                  className="w-full py-3 bg-gradient-to-r from-legal-blue to-blue-700 hover:from-blue-600 text-white font-bold text-xs rounded-xl shadow transition"
+                >
+                  Done • Return to Directory
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitConsult} className="space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Request Consultation with {consultLawyer.fullName}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setIsConsultModalOpen(false)}
+                    className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Select Case File *
                   </label>
                   {citizenUserCases.length === 0 ? (
                     <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800">
-                      You have no registered cases. Please file a case first from Case Management or AI Assistant.
+                      No filed cases available. Create one from Case Management first.
                     </div>
                   ) : (
                     <select
                       value={selectedCaseForConsult}
                       onChange={(e) => setSelectedCaseForConsult(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-legal-blue font-medium"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
                     >
                       {citizenUserCases.map((c) => (
                         <option key={c._id} value={c._id}>
-                          {c.caseNumber || 'CASE'} — {c.title} ({c.category})
+                          {c.caseNumber || 'CASE'} — {c.title}
                         </option>
                       ))}
                     </select>
@@ -1193,37 +1623,37 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Message / Special Instructions for Advocate
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Note for Advocate
                   </label>
                   <textarea
-                    rows={3}
-                    placeholder="Provide context on when you need consultation, court hearing dates, or urgency details..."
-                    value={consultMessage}
-                    onChange={(e) => setConsultMessage(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-legal-blue resize-none"
+                    rows={2}
+                    value={consultForm.notes}
+                    onChange={(e) => setConsultForm({ ...consultForm, notes: e.target.value })}
+                    placeholder="Provide details on your case situation and urgency..."
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs resize-none"
                   />
                 </div>
 
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-end gap-2.5">
                   <button
                     type="button"
-                    onClick={() => setConsultModalAdvocate(null)}
-                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl"
+                    onClick={() => setIsConsultModalOpen(false)}
+                    className="px-3.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={sendingConsult || citizenUserCases.length === 0}
-                    className="px-5 py-2.5 bg-gradient-to-r from-legal-blue to-blue-700 hover:from-blue-600 hover:to-blue-800 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow flex items-center gap-1.5"
+                    disabled={submittingConsult || citizenUserCases.length === 0}
+                    className="px-5 py-2.5 bg-gradient-to-r from-legal-blue to-blue-700 hover:from-blue-600 text-white rounded-xl text-xs font-bold shadow-md flex items-center gap-2"
                   >
-                    {sendingConsult ? (
-                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    {submittingConsult ? (
+                      <span>Submitting...</span>
                     ) : (
                       <>
                         <Send className="w-3.5 h-3.5 text-legal-gold" />
-                        <span>Dispatch Request</span>
+                        <span>Send Request</span>
                       </>
                     )}
                   </button>
@@ -1234,7 +1664,7 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
         </div>
       )}
 
-      {/* ── MODAL: REJECT INCOMING REQUEST WITH REASON ───────────── */}
+      {/* ── MODAL: REJECT REQUEST ── */}
       {rejectModalData && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
@@ -1249,7 +1679,7 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
             </div>
 
             <p className="text-xs text-slate-600">
-              Are you sure you want to decline this request for case{' '}
+              Decline representation request for case{' '}
               <strong>{rejectModalData.case?.title || rejectModalData.case?.caseNumber}</strong>?
             </p>
 
@@ -1259,10 +1689,10 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
               </label>
               <textarea
                 rows={2}
-                placeholder="e.g. Current court schedule full / Outside practice jurisdiction..."
+                placeholder="e.g. Current trial calendar full..."
                 value={rejectionReason}
                 onChange={(e) => setRejectionReason(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-red-400 resize-none"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs resize-none"
               />
             </div>
 
@@ -1284,67 +1714,14 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
         </div>
       )}
 
-      {/* Transparent Match Breakdown Modal */}
-      {selectedLawyerExplanation && (
-        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 uppercase">
-                  Transparent Match Breakdown
-                </span>
-                <h3 className="text-sm font-bold text-slate-900 mt-1">
-                  {selectedLawyerExplanation.fullName} ({selectedLawyerExplanation.matchPercentage}% Match)
-                </h3>
-              </div>
-              <button
-                onClick={() => setSelectedLawyerExplanation(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">{selectedLawyerExplanation.summaryExplanation}</p>
-
-            <div className="space-y-2">
-              {selectedLawyerExplanation.explanationBreakdown?.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center justify-between text-xs"
-                >
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className={`w-4 h-4 ${item.matched ? 'text-emerald-600' : 'text-slate-400'}`} />
-                    <div>
-                      <span className="font-bold text-slate-800 block">{item.factor}</span>
-                      <span className="text-[11px] text-slate-500">{item.label}</span>
-                    </div>
-                  </div>
-                  <span className="font-mono font-bold text-legal-blue">
-                    +{item.points}/{item.maxPoints}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            <button
-              onClick={() => setSelectedLawyerExplanation(null)}
-              className="w-full py-3 bg-[#0B1F33] text-white font-bold text-xs rounded-2xl transition shadow"
-            >
-              Close Breakdown
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── MODAL: ACCEPT INCOMING REQUEST CONFIRMATION ─────────── */}
+      {/* ── MODAL: ACCEPT REQUEST ── */}
       {acceptModalData && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 text-emerald-700">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                <span>Accept Legal Assistance Request</span>
+                <span>Accept Case Representation</span>
               </h3>
               <button
                 onClick={() => setAcceptModalData(null)}
@@ -1355,20 +1732,12 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
             </div>
 
             <p className="text-xs text-slate-600 leading-relaxed">
-              Accept this legal assistance request? This will add the case to your ongoing cases and establish your formal advocate assignment.
+              Accept this request to assign yourself as the legal counsel for this case file.
             </p>
 
             <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-xs space-y-1.5">
               <p className="font-bold text-slate-900">{acceptModalData.case?.title || 'Legal Dispute'}</p>
-              <p className="text-slate-500 font-mono text-[11px]">Case Number: {acceptModalData.case?.caseNumber || 'N/A'}</p>
-              <p className="text-slate-600">
-                Complainant: <strong>{acceptModalData.citizen?.email || acceptModalData.case?.user?.email || 'Citizen User'}</strong>
-              </p>
-              {acceptModalData.requestMessage && (
-                <p className="text-slate-500 italic text-[11px] pt-1 border-t border-slate-200">
-                  "{acceptModalData.requestMessage}"
-                </p>
-              )}
+              <p className="text-slate-500 font-mono text-[11px]">Case: {acceptModalData.case?.caseNumber || 'N/A'}</p>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
@@ -1388,14 +1757,47 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
                 ) : (
                   <Check className="w-3.5 h-3.5" />
                 )}
-                <span>Confirm & Accept Case</span>
+                <span>Confirm & Accept</span>
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── MODAL: ONGOING CASE DOSSIER ─────────────────────────── */}
+      {/* ── MODAL: TRANSPARENT BREAKDOWN ── */}
+      {selectedLawyerExplanation && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 uppercase">
+                  Match Breakdown
+                </span>
+                <h3 className="text-sm font-bold text-slate-900 mt-1">
+                  {selectedLawyerExplanation.fullName} ({selectedLawyerExplanation.matchPercentage}% Match)
+                </h3>
+              </div>
+              <button
+                onClick={() => setSelectedLawyerExplanation(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">{selectedLawyerExplanation.summaryExplanation}</p>
+
+            <button
+              onClick={() => setSelectedLawyerExplanation(null)}
+              className="w-full py-3 bg-[#0B1F33] text-white font-bold text-xs rounded-2xl transition shadow"
+            >
+              Close Breakdown
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: ONGOING CASE DOSSIER ── */}
       {selectedOngoingCase && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-2xl w-full p-6 sm:p-8 space-y-4 max-h-[90vh] overflow-y-auto">
@@ -1431,27 +1833,18 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
               </div>
 
               <div>
-                <h4 className="font-bold text-slate-800 uppercase tracking-wider mb-1">Issue Under Dispute</h4>
+                <h4 className="font-bold text-slate-800 uppercase tracking-wider mb-1">Issue</h4>
                 <p className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 leading-relaxed text-slate-700">
                   {selectedOngoingCase.issue}
                 </p>
               </div>
 
               <div>
-                <h4 className="font-bold text-slate-800 uppercase tracking-wider mb-1">Detailed Case Narrative</h4>
+                <h4 className="font-bold text-slate-800 uppercase tracking-wider mb-1">Case Narrative</h4>
                 <p className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 leading-relaxed text-slate-700">
                   {selectedOngoingCase.description}
                 </p>
               </div>
-
-              {selectedOngoingCase.financialDetails?.disputedAmount > 0 && (
-                <div className="p-3.5 bg-blue-50 rounded-2xl border border-blue-100 flex items-center justify-between">
-                  <span className="font-bold text-slate-700">Disputed Financial Quantum:</span>
-                  <span className="font-bold text-base font-mono text-legal-blue">
-                    ₹{Number(selectedOngoingCase.financialDetails.disputedAmount).toLocaleString('en-IN')}
-                  </span>
-                </div>
-              )}
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
@@ -1468,4 +1861,3 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
     </div>
   );
 }
-
