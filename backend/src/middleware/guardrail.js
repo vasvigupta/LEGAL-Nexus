@@ -26,13 +26,14 @@ const THREAT_CATEGORIES = {
   VIOLENCE: {
     label: 'Violence & Severe Crimes',
     patterns: [
-      /\b(?:how\s+(?:to|can\s+i|do\s+i)|want\s+to|help\s+me|need\s+to|guide\s+me|tell\s+me\s+how|plan(?:ning)?\s+to)\s+(?:commit|do|execute|carry\s+out|attempt)?\s*(?:(?:1st|first|2nd|second|3rd|third)\s*degree\s+)?(?:murder|kill|killing|homicide|assassination|slaughter|poisoning|lynching|manslaughter)\b/i,
+      /\b(?:how\s+(?:to|can\s+i|do\s+i)|want\s+to|help\s+me|need\s+to|guide\s+me|tell\s+me\s+how|plan(?:ning)?\s+(?:to|a)?)\s+(?:commit|do|execute|carry\s+out|attempt)?\s*(?:(?:1st|first|2nd|second|3rd|third)\s*degree\s+)?(?:murder|kill|killing|homicide|assassination|slaughter|poisoning|lynching|manslaughter)\b/i,
       /\b(?:murder|kill|assassinate|poison|behead|strangle|shoot|stab|execute)\s+(?:someone|somebody|a\s+person|anyone|people|my|him|her|them|enemy|partner|wife|husband|boss|neighbor|rival)\b/i,
       /\b(?:hire|find|get|pay|contract)\s+(?:a\s+)?(?:hitman|assassin|contract\s+killer|shooter|gangster|goon|thug)\b/i,
       /\b(?:how\s+(?:to|can\s+i)|want\s+to|help\s+me|guide\s+me)\s+(?:assault|attack|beat\s+up|hurt|injure|harm|torture|acid\s+attack|dismember|maim)\b/i,
-      /\b(?:how\s+(?:to|can\s+i)|want\s+to|help\s+me)\s+(?:kidnap|abduct|hold\s+hostage|ransom)\b/i,
+      /\b(?:how\s+(?:to|can\s+i)|want\s+to|help\s+me|need\s+to|plan(?:ning)?\s+(?:to|a)?)\s+(?:kidnap|kidnapping|abduct|abduction|hold\s+hostage|ransom)\b/i,
       /\b(?:how\s+(?:to|can\s+i))\s+(?:commit\s+suicide|kill\s+myself|end\s+my\s+life|hang\s+myself)\b/i,
-      /\b(?:commit|carry\s+out|execute)\s+(?:a\s+)?(?:crime|murder|robbery|heist|lynching|terrorist\s+attack)\b/i,
+      /\b(?:commit|carry\s+out|execute|plan|planning)\s+(?:a\s+)?(?:crime|murder|robbery|heist|lynching|terrorist\s+attack|kidnapping)\b/i,
+      /\b(?:how\s+(?:to|can\s+i)|want\s+to|help\s+me)\s+(?:threaten|intimidate|silence)\s+(?:a\s+)?(?:witness|police|judge|investigator|officer|magistrate|victim)\b/i,
     ],
   },
 
@@ -43,9 +44,6 @@ const THREAT_CATEGORIES = {
       /\b(?:how\s+(?:to|can\s+i)|guide\s+me)\s+(?:hide|dispose\s+of|destroy|burn|bury|dissolve)\s+(?:a\s+)?(?:dead\s+body|corpse|body|crime\s+scene|murder\s+weapon|evidence|fingerprints)\b/i,
       /\b(?:how\s+(?:to|can\s+i))\s+(?:bribe|pay\s+off|buy\s+off|threaten|silence|eliminate)\s+(?:a\s+)?(?:witness|police|judge|investigator|officer|magistrate|victim)\b/i,
       /\b(?:how\s+(?:to|can\s+i))\s+(?:flee|escape|run\s+away\s+from)\s+(?:the\s+country|police|custody|jail|prison)\s+(?:after\s+committing|to\s+avoid)\b/i,
-      /\b(?:tamper\s+with|destroy|hide|suppress|alter)\s+(?:evidence|proof|records?|cctv|dna)\b/i,
-      /\bfabricate\s+(?:\w+\s+)*evidence\b/i,
-      /\b(?:perjury|commit\s+perjury|lie\s+(?:in|under)\s+(?:court|oath))\b/i,
     ],
   },
 
@@ -68,6 +66,8 @@ const THREAT_CATEGORIES = {
       /\b(?:help\s+me|want\s+to|need\s+to)\s+(?:forge|fake|fabricate|falsify)\b/i,
       /\b(?:how\s+(?:to|can\s+i))\s+(?:impersonate|pretend\s+to\s+be)\s+(?:a\s+)?(?:lawyer|judge|officer|official|police|doctor|ias|ips)\b/i,
       /\b(?:how\s+(?:to|can\s+i))\s+(?:create|make|produce)\s+(?:\w+\s+)*(?:fake|forged|counterfeit|fraudulent)\s+(?:\w+\s+)*(?:documents?|ids?|passports?|certificates?|evidence|currency|money|notes?|bills?)\b/i,
+      /\b(?:tamper\s+with|destroy|hide|suppress|alter)\s+(?:evidence|proof|records?|cctv|dna)\b/i,
+      /\b(?:perjury|commit\s+perjury|lie\s+(?:in|under)\s+(?:court|oath))\b/i,
     ],
   },
 
