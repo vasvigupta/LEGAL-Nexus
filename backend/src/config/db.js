@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const logger = require('../utils/logger');
 const config = require('./env');
 
-const connectDB = async (customUri = null, maxRetries = 5) => {
+const connectDB = async (customUri = null, maxRetries = parseInt(process.env.MONGO_MAX_RETRIES, 10) || 1) => {
   const uri = customUri || config.mongo.uri;
 
   // First try the persistent MongoDB connection with retries

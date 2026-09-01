@@ -46,8 +46,6 @@ export default function LoginPage({ onAuthSuccess, onNavigateToSignup, onForgotP
     }
   };
 
-  const handleFillDemo = () => { setEmail('citizen@example.com'); setPassword('Password123!'); setError(null); };
-
   return (
     <div className="min-h-[85vh] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-300">
       <div className="w-full max-w-4xl bg-white rounded-3xl border border-slate-200/90 shadow-card overflow-hidden flex flex-col lg:flex-row">
@@ -131,7 +129,7 @@ export default function LoginPage({ onAuthSuccess, onNavigateToSignup, onForgotP
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
             {/* Email */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">Email Address</label>
@@ -140,9 +138,10 @@ export default function LoginPage({ onAuthSuccess, onNavigateToSignup, onForgotP
                 <input
                   type="email"
                   required
+                  autoComplete="off"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@example.com"
+                  placeholder="Enter email address"
                   className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-legal-blue focus:bg-white transition"
                 />
               </div>
@@ -163,6 +162,7 @@ export default function LoginPage({ onAuthSuccess, onNavigateToSignup, onForgotP
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
+                  autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
@@ -194,20 +194,8 @@ export default function LoginPage({ onAuthSuccess, onNavigateToSignup, onForgotP
             </button>
           </form>
 
-          {/* Demo credentials */}
-          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-            <span className="text-slate-400">Quick test account:</span>
-            <button
-              type="button"
-              onClick={handleFillDemo}
-              className="text-xs text-legal-blue font-bold hover:underline bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100 transition"
-            >
-              Auto-fill Citizen Demo
-            </button>
-          </div>
-
           {/* Switch to signup */}
-          <div className="text-center text-sm text-slate-500">
+          <div className="text-center text-sm text-slate-500 pt-2 border-t border-slate-100">
             <span>Don't have an account? </span>
             <button type="button" onClick={onNavigateToSignup} className="text-legal-blue font-bold hover:underline">
               Create an Account

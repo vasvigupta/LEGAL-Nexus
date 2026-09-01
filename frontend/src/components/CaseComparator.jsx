@@ -21,22 +21,61 @@ import api from '../services/api';
 
 export default function CaseComparator({ user, onOpenAuth, onSaveToNotebook }) {
   const [caseA, setCaseA] = useState({
-    title: 'Unlawful Wage Withholding & Wrongful Termination',
-    category: 'Employment & Labour Law',
-    description:
-      'Employer withheld 4 months of agreed contractual salary and terminated employment without mandatory 30-day statutory notice period or retrenchment compensation.',
-    statutes: 'Payment of Wages Act 1936 (Sec 15), Industrial Disputes Act 1947',
-    disputedAmount: '350000',
+    title: '',
+    category: '',
+    description: '',
+    statutes: '',
+    disputedAmount: '',
   });
 
   const [caseB, setCaseB] = useState({
-    title: 'Arbitration Breach & Recovery of Commercial Sums',
-    category: 'Corporate & Commercial Law',
-    description:
-      'Commercial vendor withheld project milestone deliverables and failed to refund security advance despite formal invocation of arbitration clause under Section 21.',
-    statutes: 'Arbitration and Conciliation Act 1996, Indian Contract Act 1872 (Sec 73)',
-    disputedAmount: '750000',
+    title: '',
+    category: '',
+    description: '',
+    statutes: '',
+    disputedAmount: '',
   });
+
+  const sampleScenarios = [
+    {
+      label: '💼 Example: Employment vs Commercial Dispute',
+      caseA: {
+        title: 'Unlawful Wage Withholding & Wrongful Termination',
+        category: 'Employment & Labour Law',
+        description:
+          'Employer withheld 4 months of agreed contractual salary and terminated employment without mandatory 30-day statutory notice period or retrenchment compensation.',
+        statutes: 'Payment of Wages Act 1936 (Sec 15), Industrial Disputes Act 1947',
+        disputedAmount: '350000',
+      },
+      caseB: {
+        title: 'Arbitration Breach & Recovery of Commercial Sums',
+        category: 'Corporate & Commercial Law',
+        description:
+          'Commercial vendor withheld project milestone deliverables and failed to refund security advance despite formal invocation of arbitration clause under Section 21.',
+        statutes: 'Arbitration and Conciliation Act 1996, Indian Contract Act 1872 (Sec 73)',
+        disputedAmount: '750000',
+      },
+    },
+    {
+      label: '🏠 Example: Property Deposit vs Tenant Dispossession',
+      caseA: {
+        title: 'Refund of Commercial Security Deposit & Key Handover',
+        category: 'Property & Real Estate Law',
+        description:
+          'Landlord refused to return 2 months security deposit after lease expiration citing normal wear and tear defaults.',
+        statutes: 'Transfer of Property Act 1882 (Sec 108), Specific Relief Act 1963',
+        disputedAmount: '500000',
+      },
+      caseB: {
+        title: 'Illegal Dispossession & Utility Disconnection',
+        category: 'Tenant Rights & Property Law',
+        description:
+          'Landlord unlawfully disconnected electricity and water supply without court eviction decree.',
+        statutes: 'Rent Control Act, Indian Penal Code Sec 441',
+        disputedAmount: '200000',
+      },
+    },
+  ];
 
   const [userCases, setUserCases] = useState([]);
   const [comparing, setComparing] = useState(false);
@@ -251,6 +290,42 @@ export default function CaseComparator({ user, onOpenAuth, onSaveToNotebook }) {
         </div>
       )}
 
+      {/* Example Scenario Tag Pills */}
+      <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-subtle flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-slate-500 font-bold text-[11px] uppercase tracking-wider flex items-center gap-1">
+            <Sparkles className="w-3.5 h-3.5 text-legal-gold" />
+            Example Scenarios:
+          </span>
+          {sampleScenarios.map((sc, i) => (
+            <button
+              key={i}
+              onClick={() => {
+                setCaseA(sc.caseA);
+                setCaseB(sc.caseB);
+                setComparisonResult(null);
+              }}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 font-bold rounded-xl text-xs transition border border-slate-200/90 cursor-pointer shadow-sm"
+            >
+              {sc.label}
+            </button>
+          ))}
+        </div>
+
+        {(caseA.title || caseB.title) && (
+          <button
+            onClick={() => {
+              setCaseA({ title: '', category: '', description: '', statutes: '', disputedAmount: '' });
+              setCaseB({ title: '', category: '', description: '', statutes: '', disputedAmount: '' });
+              setComparisonResult(null);
+            }}
+            className="px-3 py-1 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-xl text-xs transition border border-red-200 cursor-pointer"
+          >
+            Clear Fields
+          </button>
+        )}
+      </div>
+
       {/* Input Panes (Case A vs Case B) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Case A Pane */}
@@ -285,7 +360,7 @@ export default function CaseComparator({ user, onOpenAuth, onSaveToNotebook }) {
                 value={caseA.title}
                 onChange={(e) => setCaseA({ ...caseA, title: e.target.value })}
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                placeholder="Case title or dispute topic"
+                placeholder="e.g. Unlawful Wage Withholding & Wrongful Termination"
               />
             </div>
 
@@ -297,6 +372,7 @@ export default function CaseComparator({ user, onOpenAuth, onSaveToNotebook }) {
                   value={caseA.category}
                   onChange={(e) => setCaseA({ ...caseA, category: e.target.value })}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  placeholder="e.g. Employment & Labour Law"
                 />
               </div>
               <div>
@@ -306,6 +382,7 @@ export default function CaseComparator({ user, onOpenAuth, onSaveToNotebook }) {
                   value={caseA.disputedAmount}
                   onChange={(e) => setCaseA({ ...caseA, disputedAmount: e.target.value })}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  placeholder="e.g. 350000"
                 />
               </div>
             </div>
@@ -319,7 +396,7 @@ export default function CaseComparator({ user, onOpenAuth, onSaveToNotebook }) {
                 value={caseA.description}
                 onChange={(e) => setCaseA({ ...caseA, description: e.target.value })}
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none leading-relaxed"
-                placeholder="Describe the facts, evidence, and breach..."
+                placeholder="e.g. Employer withheld 4 months contractual salary and terminated without 30-day notice period..."
               />
             </div>
 
@@ -330,7 +407,7 @@ export default function CaseComparator({ user, onOpenAuth, onSaveToNotebook }) {
                 value={caseA.statutes}
                 onChange={(e) => setCaseA({ ...caseA, statutes: e.target.value })}
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                placeholder="e.g. Payment of Wages Act Sec 15, IPC Sec 420"
+                placeholder="e.g. Payment of Wages Act Sec 15, Industrial Disputes Act 1947"
               />
             </div>
           </div>
@@ -368,7 +445,7 @@ export default function CaseComparator({ user, onOpenAuth, onSaveToNotebook }) {
                 value={caseB.title}
                 onChange={(e) => setCaseB({ ...caseB, title: e.target.value })}
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                placeholder="Case title or precedent topic"
+                placeholder="e.g. Arbitration Breach & Recovery of Commercial Sums"
               />
             </div>
 
@@ -380,6 +457,7 @@ export default function CaseComparator({ user, onOpenAuth, onSaveToNotebook }) {
                   value={caseB.category}
                   onChange={(e) => setCaseB({ ...caseB, category: e.target.value })}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  placeholder="e.g. Corporate & Commercial Law"
                 />
               </div>
               <div>
@@ -389,6 +467,7 @@ export default function CaseComparator({ user, onOpenAuth, onSaveToNotebook }) {
                   value={caseB.disputedAmount}
                   onChange={(e) => setCaseB({ ...caseB, disputedAmount: e.target.value })}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  placeholder="e.g. 750000"
                 />
               </div>
             </div>
@@ -402,7 +481,7 @@ export default function CaseComparator({ user, onOpenAuth, onSaveToNotebook }) {
                 value={caseB.description}
                 onChange={(e) => setCaseB({ ...caseB, description: e.target.value })}
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none leading-relaxed"
-                placeholder="Describe the facts, evidence, and breach..."
+                placeholder="e.g. Commercial vendor withheld milestone deliverables and failed to refund advance..."
               />
             </div>
 
@@ -413,7 +492,7 @@ export default function CaseComparator({ user, onOpenAuth, onSaveToNotebook }) {
                 value={caseB.statutes}
                 onChange={(e) => setCaseB({ ...caseB, statutes: e.target.value })}
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                placeholder="e.g. Arbitration Act Sec 21, Contract Act Sec 73"
+                placeholder="e.g. Arbitration and Conciliation Act 1996, Contract Act 1872"
               />
             </div>
           </div>

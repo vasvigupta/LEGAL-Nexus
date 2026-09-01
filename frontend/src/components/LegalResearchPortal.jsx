@@ -28,12 +28,6 @@ export default function LegalResearchPortal({ user, onOpenAuth, onNavigateToComp
   const [clippedIdx, setClippedIdx] = useState(null);
   const [error, setError] = useState(null);
 
-  // Citation Verifier sub-widget
-  const [verifyAct, setVerifyAct] = useState('The Payment of Wages Act, 1936');
-  const [verifySec, setVerifySec] = useState('Section 15');
-  const [verifyResult, setVerifyResult] = useState(null);
-  const [verifying, setVerifying] = useState(false);
-
   const sampleScenarios = [
     {
       label: '💼 Unpaid Salary',
@@ -89,26 +83,6 @@ export default function LegalResearchPortal({ user, onOpenAuth, onNavigateToComp
       }
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleVerifyCitation = async (e) => {
-    e.preventDefault();
-    if (!user) {
-      onOpenAuth();
-      return;
-    }
-    setVerifying(true);
-    try {
-      const res = await api.post('/ai/verify-citation', {
-        act: verifyAct,
-        section: verifySec,
-      });
-      setVerifyResult(res.data.data);
-    } catch {
-      setVerifyResult({ valid: false, message: 'Citation could not be verified.' });
-    } finally {
-      setVerifying(false);
     }
   };
 
@@ -386,78 +360,6 @@ export default function LegalResearchPortal({ user, onOpenAuth, onNavigateToComp
         </div>
       )}
 
-      {/* Citation Validation Tool Widget - Hidden for Citizens & Guests */}
-      {user && user.role !== 'CITIZEN' && (
-        <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 shadow-subtle space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-navy-50 text-legal-blue rounded-xl border border-navy-100">
-                <ShieldCheck className="w-5 h-5 text-legal-blue" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Official Citation Validator</h3>
-                <p className="text-xs text-slate-500 font-medium">Verify Statutory Authenticity against Gazette Rolls</p>
-              </div>
-            </div>
-          </div>
-
-          <form onSubmit={handleVerifyCitation} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <input
-              type="text"
-              required
-              value={verifyAct}
-              onChange={(e) => setVerifyAct(e.target.value)}
-              placeholder="e.g. The Payment of Wages Act, 1936"
-              className="px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs sm:text-sm bg-slate-50 focus:ring-2 focus:ring-legal-blue focus:outline-none"
-            />
-            <input
-              type="text"
-              required
-              value={verifySec}
-              onChange={(e) => setVerifySec(e.target.value)}
-              placeholder="e.g. Section 15"
-              className="px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs sm:text-sm bg-slate-50 focus:ring-2 focus:ring-legal-blue focus:outline-none"
-            />
-            <button
-              type="submit"
-              disabled={verifying}
-              className="px-5 py-2.5 bg-[#0B1F33] hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow"
-            >
-              {verifying ? (
-                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-              ) : (
-                'Validate Citation'
-              )}
-            </button>
-          </form>
-
-          {verifyResult && (
-            <div
-              className={`p-4 rounded-2xl border text-xs flex items-center gap-3 animate-in fade-in ${
-                verifyResult.valid
-                  ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
-                  : 'bg-red-50 text-red-900 border-red-200'
-              }`}
-            >
-              {verifyResult.valid ? (
-                <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
-              ) : (
-                <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
-              )}
-              <div>
-                <span className="font-bold">
-                  {verifyResult.valid ? 'Verified Official Citation: ' : 'Citation Unverified: '}
-                </span>
-                <span>
-                  {verifyResult.valid
-                    ? `${verifyResult.act} (${verifyResult.section}) is authoritative under ${verifyResult.authority}.`
-                    : verifyResult.message || 'Section not found on authoritative rolls.'}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   Sparkles,
   CheckCircle2,
   BookOpen,
+  GraduationCap,
   X,
   Scale,
   Check,
@@ -40,11 +41,94 @@ import api from '../services/api';
 
 export default function LawyerDirectory({ user, onOpenAuth }) {
   const isLawyer = user?.role === 'LAWYER';
+  const isLawStudent = user?.role === 'LAW_STUDENT';
 
   // Sub-tabs:
   // For lawyer: incomingRequests | ongoingCases | directory | caseStudies
-  // For citizen/others: directory | myRequests | caseStudies | consultations
+  // For law student: directory | myMentorships
+  // For citizen/others: directory | myRequests
   const [activeSubTab, setActiveSubTab] = useState(isLawyer ? 'incomingRequests' : 'directory');
+
+  // Student Mentorship Request Modal & State
+  const [isMentorshipModalOpen, setIsMentorshipModalOpen] = useState(false);
+  const [mentorshipAdvocate, setMentorshipAdvocate] = useState(null);
+  const [mentorshipForm, setMentorshipForm] = useState({
+    studentCollege: 'Faculty of Law, Delhi University',
+    studentYear: '3rd Year LL.B',
+    mentorshipFocus: '🏛️ Courtroom Advocacy & Trial Practice',
+    coverNote: '',
+  });
+  const [submittingMentorship, setSubmittingMentorship] = useState(false);
+  const [mentorshipSuccess, setMentorshipSuccess] = useState(null);
+  const [studentMentorships, setStudentMentorships] = useState(() => {
+    try {
+      const saved = localStorage.getItem('nyaya_student_mentorships');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const openMentorshipModal = (advocate) => {
+    if (!user) {
+      onOpenAuth();
+      return;
+    }
+    setMentorshipAdvocate(advocate);
+    setMentorshipForm({
+      studentCollege: user?.profileData?.college || 'Faculty of Law, Delhi University',
+      studentYear: '3rd Year LL.B',
+      mentorshipFocus: '🏛️ Courtroom Advocacy & Trial Practice',
+      coverNote: '',
+    });
+    setMentorshipSuccess(null);
+    setIsMentorshipModalOpen(true);
+  };
+
+  const handleSendMentorshipRequest = async (e) => {
+    e.preventDefault();
+    if (!mentorshipAdvocate) return;
+    setSubmittingMentorship(true);
+
+    try {
+      const targetLawyerId = mentorshipAdvocate.user?._id || mentorshipAdvocate.user || mentorshipAdvocate._id;
+
+      try {
+        await api.post('/lawyers/request-consultation', {
+          lawyerId: targetLawyerId,
+          category: '🎓 Student Mentorship & Training',
+          message: `[Mentorship Inquiry] College: ${mentorshipForm.studentCollege} | Year: ${mentorshipForm.studentYear} | Focus: ${mentorshipForm.mentorshipFocus}\n\nNotes: ${mentorshipForm.coverNote}`,
+        });
+      } catch {
+        // Fallback
+      }
+
+      const newApp = {
+        id: `MNT-${Math.floor(100000 + Math.random() * 900000)}`,
+        advocateName: mentorshipAdvocate.fullName || 'Advocate',
+        advocateTitle: mentorshipAdvocate.title || 'Advocate on Record',
+        studentCollege: mentorshipForm.studentCollege,
+        studentYear: mentorshipForm.studentYear,
+        mentorshipFocus: mentorshipForm.mentorshipFocus,
+        coverNote: mentorshipForm.coverNote,
+        status: 'PENDING',
+        appliedAt: new Date().toLocaleDateString(),
+      };
+
+      const updated = [newApp, ...studentMentorships];
+      setStudentMentorships(updated);
+      localStorage.setItem('nyaya_student_mentorships', JSON.stringify(updated));
+
+      setMentorshipSuccess({
+        advocateName: mentorshipAdvocate.fullName,
+        applicationId: newApp.id,
+      });
+
+      showToast(`🎓 Mentorship request submitted to ${mentorshipAdvocate.fullName}!`);
+    } finally {
+      setSubmittingMentorship(false);
+    }
+  };
 
   // Directory state
   const [lawyers, setLawyers] = useState([]);
@@ -584,6 +668,32 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
               <span>Precedent Case Studies ({caseStudies.length})</span>
             </button>
           </>
+        ) : isLawStudent ? (
+          <>
+            <button
+              onClick={() => setActiveSubTab('directory')}
+              className={`px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
+                activeSubTab === 'directory'
+                  ? 'bg-emerald-600 text-white shadow-sm font-bold'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <UserCheck className="w-4 h-4" />
+              <span>Advocates Mentorship Directory ({displayedLawyers.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveSubTab('myMentorships')}
+              className={`px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
+                activeSubTab === 'myMentorships'
+                  ? 'bg-emerald-600 text-white shadow-sm font-bold'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <GraduationCap className="w-4 h-4" />
+              <span>My Mentorship Applications ({studentMentorships.length})</span>
+            </button>
+          </>
         ) : (
           <>
             <button
@@ -612,18 +722,6 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
             >
               <Clock className="w-4 h-4" />
               <span>My Sent Requests ({citizenRequests.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSubTab('caseStudies')}
-              className={`px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
-                activeSubTab === 'caseStudies'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <BookOpen className="w-4 h-4" />
-              <span>Precedents & Case Studies ({caseStudies.length})</span>
             </button>
           </>
         )}
@@ -965,6 +1063,84 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
         </div>
       )}
 
+      {/* ── 4B. LAW STUDENT MENTORSHIPS VIEW ── */}
+      {activeSubTab === 'myMentorships' && isLawStudent && (
+        <div className="space-y-4">
+          <div className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-subtle flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <GraduationCap className="w-4 h-4 text-emerald-600" />
+                <span>My Advocate Mentorship & Training Applications</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Track the status of mentorship inquiries submitted to High Court and trial advocates.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setActiveSubTab('directory')}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <UserCheck className="w-4 h-4" />
+              <span>Explore Advocates</span>
+            </button>
+          </div>
+
+          {studentMentorships.length === 0 ? (
+            <div className="p-8 bg-white rounded-3xl border border-slate-200/90 shadow-subtle text-center space-y-3">
+              <GraduationCap className="w-10 h-10 text-emerald-500 mx-auto" />
+              <h4 className="text-sm font-bold text-slate-900">No Mentorship Applications Sent Yet</h4>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                Explore the Advocate Directory and connect with Bar Council verified advocates for courtroom training, legal research internships, and career mentorship.
+              </p>
+              <button
+                onClick={() => setActiveSubTab('directory')}
+                className="px-5 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-xl shadow cursor-pointer"
+              >
+                Browse Mentorship Directory
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {studentMentorships.map((mnt) => (
+                <div
+                  key={mnt.id}
+                  className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-mono font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                        {mnt.id}
+                      </span>
+                      <h4 className="text-sm font-bold text-slate-900">Mentorship with {mnt.advocateName}</h4>
+                      <span
+                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase ${
+                          mnt.status === 'PENDING'
+                            ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                            : mnt.status === 'ACCEPTED'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            : 'bg-red-100 text-red-800 border border-red-300'
+                        }`}
+                      >
+                        {mnt.status}
+                      </span>
+                    </div>
+
+                    <div className="text-xs text-slate-600 space-y-1">
+                      <p><strong>Training Focus:</strong> {mnt.mentorshipFocus}</p>
+                      <p><strong>College & Year:</strong> {mnt.studentCollege} ({mnt.studentYear})</p>
+                      {mnt.coverNote && <p className="italic text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-100">"{mnt.coverNote}"</p>}
+                    </div>
+
+                    <p className="text-[10px] text-slate-400 font-mono">Applied on {mnt.appliedAt}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── 5. ADVOCATES DIRECTORY (GRID & SEARCH) ── */}
       {activeSubTab === 'directory' && (
         <>
@@ -1185,7 +1361,15 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
 
                         {!isLawyer && (
                           <>
-                            {sentReq?.status === 'PENDING' ? (
+                            {isLawStudent ? (
+                              <button
+                                onClick={() => openMentorshipModal(prof)}
+                                className="px-2.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-800 text-white text-[11px] font-bold rounded-xl shadow transition flex items-center justify-center gap-1 cursor-pointer"
+                              >
+                                <GraduationCap className="w-3.5 h-3.5 text-emerald-200" />
+                                <span>Mentorship</span>
+                              </button>
+                            ) : sentReq?.status === 'PENDING' ? (
                               <button
                                 disabled
                                 className="px-2.5 py-2 bg-amber-50 text-amber-800 text-[11px] font-bold rounded-xl border border-amber-300 opacity-90 cursor-not-allowed text-center"
@@ -1218,7 +1402,7 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
       )}
 
       {/* ── 6. CASE STUDIES VIEW ── */}
-      {activeSubTab === 'caseStudies' && (
+      {activeSubTab === 'caseStudies' && isLawyer && (
         <div className="space-y-4">
           <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-600">
             <strong>Legal Precedents & Case Studies:</strong> Verified advocates publish anonymized case strategies and judicial outcomes with 100% confidential client privacy.
@@ -1314,31 +1498,33 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
                 )}
               </div>
 
-              <div>
-                <h4 className="font-bold text-slate-900 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <Gavel className="w-4 h-4 text-legal-blue" />
-                  <span>Case Histories & Precedents ({selectedAdvocateProfile.caseHistories?.length || 0})</span>
-                </h4>
-                {!selectedAdvocateProfile.caseHistories || selectedAdvocateProfile.caseHistories.length === 0 ? (
-                  <p className="text-slate-400 italic">No case histories uploaded.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {selectedAdvocateProfile.caseHistories.map((ch, i) => (
-                      <div key={i} className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1.5">
-                        <div className="flex justify-between items-center">
-                          <span className="font-bold text-slate-900">{ch.title}</span>
-                          <span className="text-[10px] text-slate-500 font-mono">{ch.year}</span>
+              {isLawyer && (
+                <div>
+                  <h4 className="font-bold text-slate-900 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <Gavel className="w-4 h-4 text-legal-blue" />
+                    <span>Case Histories & Precedents ({selectedAdvocateProfile.caseHistories?.length || 0})</span>
+                  </h4>
+                  {!selectedAdvocateProfile.caseHistories || selectedAdvocateProfile.caseHistories.length === 0 ? (
+                    <p className="text-slate-400 italic">No case histories uploaded.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {selectedAdvocateProfile.caseHistories.map((ch, i) => (
+                        <div key={i} className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1.5">
+                          <div className="flex justify-between items-center">
+                            <span className="font-bold text-slate-900">{ch.title}</span>
+                            <span className="text-[10px] text-slate-500 font-mono">{ch.year}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500">{ch.forum} • {ch.category}</p>
+                          <p className="text-slate-600">{ch.summary}</p>
+                          <div className="p-2 bg-emerald-50 rounded-lg text-emerald-900 text-[11px]">
+                            <strong>Outcome: </strong>{ch.outcome}
+                          </div>
                         </div>
-                        <p className="text-[11px] text-slate-500">{ch.forum} • {ch.category}</p>
-                        <p className="text-slate-600">{ch.summary}</p>
-                        <div className="p-2 bg-emerald-50 rounded-lg text-emerald-900 text-[11px]">
-                          <strong>Outcome: </strong>{ch.outcome}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
@@ -1349,17 +1535,31 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
                 Close
               </button>
               {!isLawyer && (
-                <button
-                  onClick={() => {
-                    const prof = selectedAdvocateProfile;
-                    setSelectedAdvocateProfile(null);
-                    openConsultModal(prof);
-                  }}
-                  className="px-5 py-2.5 bg-legal-blue hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow flex items-center gap-1.5"
-                >
-                  <Send className="w-3.5 h-3.5 text-legal-gold" />
-                  <span>Request Consultation</span>
-                </button>
+                isLawStudent ? (
+                  <button
+                    onClick={() => {
+                      const prof = selectedAdvocateProfile;
+                      setSelectedAdvocateProfile(null);
+                      openMentorshipModal(prof);
+                    }}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <GraduationCap className="w-4 h-4 text-emerald-200" />
+                    <span>Request Mentorship & Training</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      const prof = selectedAdvocateProfile;
+                      setSelectedAdvocateProfile(null);
+                      openConsultModal(prof);
+                    }}
+                    className="px-5 py-2.5 bg-legal-blue hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow flex items-center gap-1.5"
+                  >
+                    <Send className="w-3.5 h-3.5 text-legal-gold" />
+                    <span>Request Consultation</span>
+                  </button>
+                )
               )}
             </div>
           </div>
@@ -1855,6 +2055,149 @@ export default function LawyerDirectory({ user, onOpenAuth }) {
                 Close Dossier
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: STUDENT MENTORSHIP & TRAINING REQUEST ── */}
+      {isMentorshipModalOpen && mentorshipAdvocate && (
+        <div className="fixed inset-0 bg-slate-900/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 sm:p-8 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-emerald-100 text-emerald-800 rounded-xl">
+                  <GraduationCap className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Request Mentorship & Training</h3>
+                  <p className="text-xs text-slate-500 font-medium">Connect with {mentorshipAdvocate.fullName}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsMentorshipModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {mentorshipSuccess ? (
+              <div className="p-6 bg-emerald-50 rounded-2xl border border-emerald-200 text-center space-y-3">
+                <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <h4 className="text-sm font-bold text-emerald-900">Mentorship Application Dispatched!</h4>
+                <p className="text-xs text-emerald-800 leading-relaxed">
+                  Your mentorship and courtroom training inquiry has been sent to <strong>{mentorshipSuccess.advocateName}</strong>. You will be notified when the advocate reviews your application.
+                </p>
+                <div className="pt-2">
+                  <button
+                    onClick={() => {
+                      setIsMentorshipModalOpen(false);
+                      setActiveSubTab('myMentorships');
+                    }}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow cursor-pointer"
+                  >
+                    View My Mentorship Applications
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleSendMentorshipRequest} className="space-y-4 text-xs">
+                <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 text-slate-700 leading-relaxed">
+                  <strong className="text-blue-900 block mb-0.5">Advocate Mentorship Program:</strong>
+                  Connect directly with practicing advocates for internship opportunities, courtroom advocacy guidance, and case research training.
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Law School / College & University
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={mentorshipForm.studentCollege}
+                    onChange={(e) => setMentorshipForm({ ...mentorshipForm, studentCollege: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    placeholder="e.g. Faculty of Law, DU"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                      Year of Study
+                    </label>
+                    <select
+                      value={mentorshipForm.studentYear}
+                      onChange={(e) => setMentorshipForm({ ...mentorshipForm, studentYear: e.target.value })}
+                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none font-medium"
+                    >
+                      <option value="1st Year LL.B">1st Year LL.B</option>
+                      <option value="2nd Year LL.B">2nd Year LL.B</option>
+                      <option value="3rd Year LL.B">3rd Year LL.B</option>
+                      <option value="4th Year BA LL.B">4th Year BA LL.B</option>
+                      <option value="5th Year BA LL.B">5th Year BA LL.B</option>
+                      <option value="LL.M Candidate">LL.M Candidate</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                      Training Focus Area
+                    </label>
+                    <select
+                      value={mentorshipForm.mentorshipFocus}
+                      onChange={(e) => setMentorshipForm({ ...mentorshipForm, mentorshipFocus: e.target.value })}
+                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none font-medium truncate"
+                    >
+                      <option value="🏛️ Courtroom Advocacy & Trial Practice">🏛️ Courtroom Advocacy</option>
+                      <option value="📜 Legal Drafting & Brief Preparation">📜 Legal Drafting & Briefs</option>
+                      <option value="🔬 Precedent Research & Case Grounding">🔬 Precedent Research</option>
+                      <option value="⚖️ General Legal Career & Bar Exam Guidance">⚖️ General Mentorship</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Cover Note / Introduction to Advocate
+                  </label>
+                  <textarea
+                    rows={3}
+                    required
+                    value={mentorshipForm.coverNote}
+                    onChange={(e) => setMentorshipForm({ ...mentorshipForm, coverNote: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none resize-none leading-relaxed"
+                    placeholder="Introduce yourself, specify your career aspirations, and explain why you want to train under this advocate..."
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsMentorshipModalOpen(false)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingMentorship}
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {submittingMentorship ? (
+                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                    ) : (
+                      <>
+                        <GraduationCap className="w-4 h-4 text-emerald-200" />
+                        <span>Submit Mentorship Request</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

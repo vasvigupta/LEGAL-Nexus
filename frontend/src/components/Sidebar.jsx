@@ -30,6 +30,9 @@ export default function Sidebar({
 }) {
   const isAdmin = user?.role === 'ADMIN';
   const isLawyer = user?.role === 'LAWYER';
+  const isLawStudent = user?.role === 'LAW_STUDENT';
+
+  const isProfessional = isLawyer || isLawStudent;
 
   // Admin Specific Sidebar Items
   const adminItems = [
@@ -37,31 +40,30 @@ export default function Sidebar({
     { id: 'documents', label: 'Document Intelligence', shortLabel: 'Doc AI', icon: FileText },
     { id: 'research', label: 'Statutory Research', shortLabel: 'Research', icon: BookOpen },
     { id: 'lawyers', label: 'Advocate Directory', shortLabel: 'Advocates', icon: UserCheck },
-    { id: 'system', label: 'System Status', shortLabel: 'System', icon: Activity },
   ];
 
   // Standard Workspace Items with Role Restrictions
   const rawWorkspaceItems = [
-    { id: 'cases', label: 'Case Management', shortLabel: 'Cases', icon: LayoutDashboard, hideForLawyer: true },
+    { id: 'cases', label: 'Case Management', shortLabel: 'Cases', icon: LayoutDashboard, hideForLawyer: true, hideForStudent: true },
     { id: 'intake', label: 'AI Legal Assistant', shortLabel: 'AI Chat', icon: Bot, badge: 'Agentic', highlight: true, hideForLawyer: true },
-    { id: 'lawyers', label: isLawyer ? 'Advocate Hub & Requests' : 'Advocate Directory', shortLabel: 'Advocates', icon: UserCheck, badge: isLawyer ? 'Requests' : 'Verified' },
-    { id: 'comparator', label: 'Case Law Comparator', shortLabel: 'Comparator', icon: GitCompare, badge: 'Dual AI', lawyerOnly: true },
-    { id: 'notebook', label: 'Research Notebook', shortLabel: 'Notebook', icon: Bookmark, badge: 'Notes', lawyerOnly: true },
-    { id: 'documents', label: 'Document Intelligence', shortLabel: 'Doc AI', icon: FileText, badge: 'Audit' },
+    { id: 'lawyers', label: isLawyer ? 'Advocate Hub & Requests' : isLawStudent ? 'Advocate Mentorship & Hub' : 'Advocate Directory', shortLabel: 'Advocates', icon: UserCheck, badge: isLawyer ? 'Requests' : isLawStudent ? 'Training' : 'Verified' },
+    { id: 'comparator', label: 'Case Law Comparator', shortLabel: 'Comparator', icon: GitCompare, badge: 'Dual AI', allowProfessional: true },
+    { id: 'notebook', label: 'Research Notebook', shortLabel: 'Notebook', icon: Bookmark, badge: 'Notes', allowProfessional: true },
+    { id: 'documents', label: 'Document Intelligence', shortLabel: 'Doc AI', icon: FileText, badge: 'Audit', hideForStudent: true },
     { id: 'drafts', label: 'Smart Legal Drafting', shortLabel: 'Drafting', icon: PenTool, badge: '7 Forms' },
     { id: 'research', label: 'Statutory Research', shortLabel: 'Research', icon: BookOpen, badge: 'RAG' },
   ];
 
   const mainWorkspaceItems = rawWorkspaceItems.filter((item) => {
     if (isLawyer && item.hideForLawyer) return false;
-    if (!isLawyer && item.lawyerOnly) return false;
+    if (isLawStudent && item.hideForStudent) return false;
+    if (item.allowProfessional && !isProfessional) return false;
     return true;
   });
 
   const secondaryItems = [
     { id: 'profile', label: isLawyer ? 'Profile & Case History' : 'Profile & Network', shortLabel: 'Profile', icon: Users, requireAuth: true },
     { id: 'settings', label: 'Platform Settings', shortLabel: 'Settings', icon: Settings },
-    { id: 'system', label: 'System Status', shortLabel: 'System', icon: Activity, requireRole: ['LAWYER', 'ADMIN', 'LAW_STUDENT'] },
   ];
 
   // Role → gradient for avatar

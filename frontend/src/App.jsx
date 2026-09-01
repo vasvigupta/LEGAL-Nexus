@@ -50,7 +50,6 @@ const VALID_TABS = [
   'admin',
   'profile',
   'settings',
-  'system',
 ];
 
 const getInitialTab = () => {
@@ -264,7 +263,6 @@ export default function App() {
         { id: 'lawyers', label: 'Advocate Directory', icon: UserCheck },
         { id: 'profile', label: 'Profile & Network', icon: Users },
         { id: 'settings', label: 'Platform Settings', icon: Settings },
-        { id: 'system', label: 'System Status', icon: Activity },
       ];
     }
 
@@ -278,7 +276,19 @@ export default function App() {
         { id: 'notebook', label: 'Research Notebook', icon: Bookmark },
         { id: 'profile', label: 'Profile & Case History', icon: Users },
         { id: 'settings', label: 'Platform Settings', icon: Settings },
-        { id: 'system', label: 'System Status', icon: Activity },
+      ];
+    }
+
+    if (user.role === 'LAW_STUDENT') {
+      return [
+        { id: 'intake', label: 'AI Legal Assistant', icon: Bot },
+        { id: 'drafts', label: 'Smart Legal Drafting', icon: PenTool },
+        { id: 'research', label: 'Statutory Research', icon: BookOpen },
+        { id: 'comparator', label: 'Case Law Comparator', icon: GitCompare },
+        { id: 'notebook', label: 'Research Notebook', icon: Bookmark },
+        { id: 'lawyers', label: 'Advocate Mentorship & Hub', icon: UserCheck },
+        { id: 'profile', label: 'Profile & Network', icon: Users },
+        { id: 'settings', label: 'Platform Settings', icon: Settings },
       ];
     }
 
@@ -540,19 +550,6 @@ export default function App() {
           {activeTab === 'settings' &&
             (user ? (
               <SettingsView user={user} onSelectTab={handleSelectTab} />
-            ) : (
-              <LoginPage
-                onAuthSuccess={handleAuthSuccess}
-                onNavigateToSignup={() => setActiveTab('signup')}
-              />
-            ))}
-
-          {activeTab === 'system' &&
-            (user ? (
-              <SystemHealth
-                healthStatus={healthStatus}
-                onRefresh={checkHealth}
-              />
             ) : (
               <LoginPage
                 onAuthSuccess={handleAuthSuccess}

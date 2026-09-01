@@ -26,7 +26,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
   const [role, setRole] = useState('CITIZEN');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
-  const [practiceAreas, setPracticeAreas] = useState('Employment & Labor, Consumer Disputes');
+  const [practiceAreas, setPracticeAreas] = useState('');
   const [barNumber, setBarNumber] = useState('');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -252,7 +252,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
               </div>
             ) : (
               /* LOGIN & SIGNUP FORMS */
-              <form onSubmit={handleSubmit} className="space-y-3.5">
+              <form onSubmit={handleSubmit} autoComplete="off" className="space-y-3.5">
                 {/* Role Selector during signup */}
                 {authMode === 'signup' && (
                   <div>
@@ -293,6 +293,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
                     <input
                       type="text"
                       required
+                      autoComplete="off"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       placeholder="e.g. Adv. Rajesh Kumar"
@@ -308,9 +309,10 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
                     <input
                       type="email"
                       required
+                      autoComplete="new-password"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="user@example.com"
+                      placeholder="Enter email address"
                       className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-legal-blue focus:outline-none"
                     />
                   </div>
@@ -334,6 +336,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
                     <input
                       type={showPassword ? 'text' : 'password'}
                       required
+                      autoComplete="new-password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"

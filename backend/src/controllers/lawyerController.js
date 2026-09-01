@@ -1612,6 +1612,197 @@ const getCitizenCases = async (
   }
 };
 
+/**
+ * POST /api/lawyers/match
+ */
+const matchLawyersForCase = async (req, res, next) => {
+  try {
+    const { caseId, category, city, maxResults = 5 } = req.body;
+
+    let caseDoc = null;
+    if (caseId) {
+      caseDoc = await Case.findById(caseId);
+    }
+
+    const targetCategory = category || caseDoc?.category || 'General';
+    const targetCity = city || caseDoc?.location?.city || '';
+
+    const filter = { isPublic: true };
+    if (targetCategory && targetCategory !== 'General') {
+      filter.primaryDomain = new RegExp(targetCategory, 'i');
+    }
+
+    let profiles = await ProfessionalProfile.find(filter)
+      .populate('user', 'email phone name')
+      .limit(maxResults * 2);
+
+    if (!profiles.length) {
+      profiles = await ProfessionalProfile.find({ isPublic: true })
+        .populate('user', 'email phone name')
+        .limit(maxResults);
+    }
+
+    const matches = [];
+    for (const profile of profiles) {
+      let score = 70;
+      const reasons = [];
+
+      if (profile.primaryDomain && targetCategory && new RegExp(targetCategory, 'i').test(profile.primaryDomain)) {
+        score += 15;
+        reasons.push({ criterion: 'Practice Area Match', score: 15, details: `Specializes in ${profile.primaryDomain}` });
+      }
+
+      if (targetCity && profile.location?.city && new RegExp(targetCity, 'i').test(profile.location.city)) {
+        score += 10;
+        reasons.push({ criterion: 'City / Court Jurisdiction', score: 10, details: `Based in ${profile.location.city}` });
+      }
+
+      if (profile.experienceYears >= 5) {
+        score += 5;
+        reasons.push({ criterion: 'Experience Level', score: 5, details: `${profile.experienceYears} years of practice` });
+      }
+
+      const matchScore = Math.min(score, 98);
+
+      if (caseDoc) {
+        let matchDoc = await LawyerMatch.findOne({ case: caseDoc._id, lawyer: profile.user._id });
+        if (!matchDoc) {
+          matchDoc = await LawyerMatch.create({
+            case: caseDoc._id,
+            lawyer: profile.user._id,
+            citizen: req.user._id,
+            matchScore,
+            matchReasons: reasons,
+            status: 'SUGGESTED',
+          });
+        }
+        matches.push({ match: matchDoc, profile });
+      } else {
+        matches.push({ profile, matchScore, matchReasons: reasons });
+      }
+
+      if (matches.length >= maxResults) break;
+    }
+
+    return sendSuccess(res, matches, 'Lawyers matched successfully');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/lawyers/case-studies
+ */
+const publishCaseStudy = async (req, res, next) => {
+  try {
+    const { title, practiceArea, forum, summary, challenge, strategy, outcome, anonymizedDetails, year } = req.body;
+
+    const caseStudy = await CaseStudy.create({
+      professional: req.user._id,
+      title,
+      practiceArea: practiceArea || 'General',
+      forum,
+      summary,
+      challenge,
+      strategy,
+      outcome,
+      anonymizedDetails: anonymizedDetails !== undefined ? anonymizedDetails : true,
+      year: year || new Date().getFullYear(),
+    });
+
+    return sendSuccess(res, caseStudy, 'Case study published successfully', 201);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PUT /api/lawyers/case-studies/:id
+ */
+const updateCaseStudy = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const caseStudy = await CaseStudy.findOneAndUpdate(
+      { _id: id, professional: req.user._id },
+      { $set: req.body },
+      { new: true, runValidators: true }
+    );
+
+    if (!caseStudy) {
+      return sendError(res, 'Case study not found or unauthorized', 404);
+    }
+
+    return sendSuccess(res, caseStudy, 'Case study updated successfully');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * DELETE /api/lawyers/case-studies/:id
+ */
+const deleteCaseStudy = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const caseStudy = await CaseStudy.findOneAndDelete({
+      _id: id,
+      professional: req.user._id,
+    });
+
+    if (!caseStudy) {
+      return sendError(res, 'Case study not found or unauthorized', 404);
+    }
+
+    return sendSuccess(res, null, 'Case study deleted successfully');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/lawyers/case-studies
+ */
+const listCaseStudies = async (req, res, next) => {
+  try {
+    const { practiceArea, lawyerId, search, page = 1, limit = 20 } = req.query;
+
+    const filter = {};
+    if (practiceArea) filter.practiceArea = new RegExp(practiceArea, 'i');
+    if (lawyerId) filter.professional = lawyerId;
+    if (search) {
+      filter.$or = [
+        { title: new RegExp(search, 'i') },
+        { summary: new RegExp(search, 'i') },
+        { outcome: new RegExp(search, 'i') },
+      ];
+    }
+
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+    const skip = (pageNum - 1) * limitNum;
+
+    const [caseStudies, total] = await Promise.all([
+      CaseStudy.find(filter)
+        .populate('professional', 'email phone name')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum),
+      CaseStudy.countDocuments(filter),
+    ]);
+
+    return sendSuccess(res, caseStudies, 'Case studies retrieved successfully', 200, {
+      total,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(total / limitNum),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   forwardToAiEngine,
   updateLawyerProfile,
@@ -1630,4 +1821,9 @@ module.exports = {
   getOngoingCases,
   getCitizenRequests,
   getCitizenCases,
+  matchLawyersForCase,
+  publishCaseStudy,
+  updateCaseStudy,
+  deleteCaseStudy,
+  listCaseStudies,
 };

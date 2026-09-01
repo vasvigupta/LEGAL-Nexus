@@ -107,6 +107,7 @@ export default function UserProfile({ user }) {
   const [connectedUsers, setConnectedUsers] = useState({});
 
   const isLawyer = user?.role === 'LAWYER';
+  const isLawStudent = user?.role === 'LAW_STUDENT';
   const isProfessional = user?.role === 'LAWYER' || user?.role === 'LAW_STUDENT';
 
   useEffect(() => {
@@ -622,7 +623,7 @@ export default function UserProfile({ user }) {
                     <span>{city}, {state || 'India'}</span>
                   </div>
                 )}
-                {barRegNumber && (
+                {isProfessional && barRegNumber && (
                   <div className="flex items-center gap-2">
                     <Award className="w-4 h-4 text-legal-gold shrink-0" />
                     <span className="font-mono">Enrol: {barRegNumber}</span>
@@ -656,7 +657,9 @@ export default function UserProfile({ user }) {
                       <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                         AI Document OCR
                       </h4>
-                      <p className="text-[10px] text-slate-500">Bar ID Card & Sanad Extractor</p>
+                      <p className="text-[10px] text-slate-500">
+                        {isLawStudent ? 'College Student ID & Enrollment Extractor' : 'Bar ID Card & Sanad Extractor'}
+                      </p>
                     </div>
                   </div>
 
@@ -675,25 +678,30 @@ export default function UserProfile({ user }) {
                   <div className="p-3.5 bg-blue-50 rounded-2xl border border-blue-200 text-xs space-y-2">
                     <div className="flex items-center gap-2 text-blue-900 font-bold">
                       <ShieldCheck className="w-4 h-4 text-blue-700" />
-                      <span>Official Bar Council Verified Advocate</span>
+                      <span>{isLawStudent ? 'Official Verified Law Student' : 'Official Bar Council Verified Advocate'}</span>
                     </div>
                     <p className="text-[11px] text-blue-800">
-                      Your enrollment ID <strong className="font-mono">{barRegNumber || 'D/1428/2006'}</strong> is authenticated on Platform Administration.
+                      {isLawStudent ? 'Your Student ID ' : 'Your enrollment ID '}
+                      <strong className="font-mono">{barRegNumber || (isLawStudent ? 'DU/LAW/2023/8921' : 'D/1428/2006')}</strong> is authenticated on Platform Administration.
                     </p>
                   </div>
                 ) : (
                   <div className="space-y-3">
                     <p className="text-xs text-slate-600 leading-relaxed">
-                      Upload or enter your <strong>State Bar Council ID</strong>. Our AI OCR engine will scan your credentials and queue your profile for Admin seal approval.
+                      {isLawStudent ? (
+                        <>Upload or enter your <strong>College Student Roll / ID Number</strong>. Our AI OCR engine will scan your student card and queue your profile for verified status.</>
+                      ) : (
+                        <>Upload or enter your <strong>State Bar Council ID</strong>. Our AI OCR engine will scan your credentials and queue your profile for Admin seal approval.</>
+                      )}
                     </p>
 
                     <div>
                       <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
-                        Bar Council ID Number
+                        {isLawStudent ? 'College Student Roll / ID Number' : 'Bar Council ID Number'}
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. D/1428/2006 or MAH/5678/2015"
+                        placeholder={isLawStudent ? "e.g. DU/LAW/2023/8921 or NLU/2022/1042" : "e.g. D/1428/2006 or MAH/5678/2015"}
                         value={barRegNumber}
                         onChange={(e) => setBarRegNumber(e.target.value)}
                         className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-semibold focus:ring-2 focus:ring-purple-500 focus:outline-none"
@@ -703,12 +711,17 @@ export default function UserProfile({ user }) {
                     <div className="space-y-1">
                       <span className="text-[10px] text-slate-400 font-semibold uppercase">Quick Samples:</span>
                       <div className="flex flex-wrap gap-1">
-                        {[
+                        {(isLawStudent ? [
+                          { label: 'DU Law (DU/LAW/2023/8921)', val: 'DU/LAW/2023/8921' },
+                          { label: 'NLSIU (NLSIU/2022/1042)', val: 'NLSIU/2022/1042' },
+                          { label: 'GLC Mum (GLC/MUM/2024/301)', val: 'GLC/MUM/2024/301' },
+                          { label: 'ILS Pune (ILS/PUN/2023/419)', val: 'ILS/PUN/2023/419' },
+                        ] : [
                           { label: 'Delhi (D/1428/2006)', val: 'D/1428/2006' },
                           { label: 'MH (MAH/5678/2015)', val: 'MAH/5678/2015' },
                           { label: 'KA (KAR/2891/2013)', val: 'KAR/2891/2013' },
                           { label: 'UP (UP/9102/2019)', val: 'UP/9102/2019' },
-                        ].map((s) => (
+                        ]).map((s) => (
                           <button
                             key={s.val}
                             type="button"
@@ -758,10 +771,10 @@ export default function UserProfile({ user }) {
                       type="button"
                       disabled={ocrLoading}
                       onClick={() => handleTriggerOcrScan()}
-                      className="w-full py-2.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center justify-center gap-1.5"
+                      className="w-full py-2.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <Sparkles className="w-3.5 h-3.5" />
-                      <span>{ocrLoading ? 'Scanning Document...' : '⚡ Scan Document & Verify Bar ID'}</span>
+                      <span>{ocrLoading ? 'Scanning Document...' : isLawStudent ? '⚡ Scan Student ID & Verify Enrollment' : '⚡ Scan Document & Verify Bar ID'}</span>
                     </button>
                   </div>
                 )}
@@ -774,7 +787,7 @@ export default function UserProfile({ user }) {
             <form onSubmit={handleSaveProfile} className="space-y-5">
               <h3 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
                 <User className="w-4 h-4 text-legal-blue" />
-                <span>Advocate Credentials & Information</span>
+                <span>{isProfessional ? 'Advocate Credentials & Information' : 'Personal Profile & Contact Information'}</span>
               </h3>
 
               {success && (
@@ -801,22 +814,24 @@ export default function UserProfile({ user }) {
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-legal-blue focus:outline-none"
-                    placeholder="e.g. Adv. Rajeshwar Sen"
+                    placeholder={isProfessional ? "e.g. Adv. Rajeshwar Sen" : "e.g. Rajesh Sharma"}
                   />
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Professional Title / Designation
-                  </label>
-                  <input
-                    type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-legal-blue focus:outline-none"
-                    placeholder="e.g. Advocate on Record, High Court"
-                  />
-                </div>
+                {isProfessional && (
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Professional Title / Designation
+                    </label>
+                    <input
+                      type="text"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-legal-blue focus:outline-none"
+                      placeholder="e.g. Advocate on Record, High Court"
+                    />
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
@@ -856,14 +871,18 @@ export default function UserProfile({ user }) {
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Bio / Professional Summary
+                  {isProfessional ? 'Bio / Professional Summary' : 'About / Personal Bio'}
                 </label>
                 <textarea
                   rows={3}
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-legal-blue focus:outline-none resize-none leading-relaxed"
-                  placeholder="Provide an overview of your trial advocacy experience, specialization, and judicial chambers background..."
+                  placeholder={
+                    isProfessional
+                      ? 'Provide an overview of your trial advocacy experience, specialization, and judicial chambers background...'
+                      : 'Provide a brief summary about yourself or any relevant notes...'
+                  }
                 />
               </div>
 
@@ -871,8 +890,8 @@ export default function UserProfile({ user }) {
               {isProfessional && (
                 <div className="space-y-4 pt-4 border-t border-slate-100">
                   <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                    <Award className="w-4 h-4 text-legal-gold" />
-                    <span>Bar Council & Court Credentials</span>
+                    {isLawStudent ? <GraduationCap className="w-4 h-4 text-emerald-600" /> : <Award className="w-4 h-4 text-legal-gold" />}
+                    <span>{isLawStudent ? 'Student Credentials & Law School Information' : 'Bar Council & Court Credentials'}</span>
                   </h4>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1328,34 +1347,36 @@ export default function UserProfile({ user }) {
             </div>
 
             {/* Case Histories */}
-            <div>
-              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <Gavel className="w-4 h-4 text-legal-blue" />
-                <span>Uploaded Case Histories & Precedents ({caseHistories.length})</span>
-              </h4>
-              {caseHistories.length === 0 ? (
-                <p className="text-xs text-slate-400 italic">No case histories uploaded yet.</p>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {caseHistories.map((ch, idx) => (
-                    <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2 text-xs">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-bold text-legal-blue bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                          {ch.category}
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-mono">{ch.year}</span>
+            {isLawyer && (
+              <div>
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <Gavel className="w-4 h-4 text-legal-blue" />
+                  <span>Uploaded Case Histories & Precedents ({caseHistories.length})</span>
+                </h4>
+                {caseHistories.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">No case histories uploaded yet.</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {caseHistories.map((ch, idx) => (
+                      <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2 text-xs">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-bold text-legal-blue bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                            {ch.category}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">{ch.year}</span>
+                        </div>
+                        <h5 className="font-bold text-slate-900">{ch.title}</h5>
+                        <p className="text-[11px] text-slate-500">{ch.forum}</p>
+                        <p className="text-slate-600">{ch.summary}</p>
+                        <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-900 text-xs">
+                          <strong>Outcome: </strong>{ch.outcome}
+                        </div>
                       </div>
-                      <h5 className="font-bold text-slate-900">{ch.title}</h5>
-                      <p className="text-[11px] text-slate-500">{ch.forum}</p>
-                      <p className="text-slate-600">{ch.summary}</p>
-                      <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-900 text-xs">
-                        <strong>Outcome: </strong>{ch.outcome}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

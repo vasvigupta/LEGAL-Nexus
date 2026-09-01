@@ -202,14 +202,14 @@ export default function SignupPage({ onAuthSuccess, onNavigateToLogin }) {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
               {/* Full name */}
               <div>
                 <label className={labelClass}>Full Legal Name</label>
                 <div className="relative">
                   <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <input type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Rajesh Kumar" className={inputClass} />
+                  <input type="text" required autoComplete="off" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Rajesh Kumar" className={inputClass} />
                 </div>
               </div>
               {/* Email */}
@@ -217,7 +217,7 @@ export default function SignupPage({ onAuthSuccess, onNavigateToLogin }) {
                 <label className={labelClass}>Email Address</label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" className={inputClass} />
+                  <input type="email" required autoComplete="new-password" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Enter email address" className={inputClass} />
                 </div>
               </div>
             </div>
@@ -228,7 +228,7 @@ export default function SignupPage({ onAuthSuccess, onNavigateToLogin }) {
                 <label className={labelClass}>Password</label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <input type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min. 8 characters" className={`${inputClass} pr-10`} />
+                  <input type={showPassword ? 'text' : 'password'} required autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min. 8 characters" className={`${inputClass} pr-10`} />
                   <button type="button" onClick={() => setShowPass(!showPassword)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition">
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -239,7 +239,7 @@ export default function SignupPage({ onAuthSuccess, onNavigateToLogin }) {
                 <label className={labelClass}>Phone Number</label>
                 <div className="relative">
                   <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 9876543210" className={inputClass} />
+                  <input type="tel" autoComplete="off" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="e.g. 9876543210" className={inputClass} />
                 </div>
               </div>
             </div>
