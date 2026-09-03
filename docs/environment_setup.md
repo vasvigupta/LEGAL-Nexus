@@ -1,6 +1,6 @@
-# Nyaya Setu — Environment Setup & Configuration
+# LEGAL-Nexus — Environment Setup & Configuration
 
-This guide details setting up the local development environment for Nyaya Setu.
+This guide details setting up the local development environment for LEGAL-Nexus.
 
 ---
 
