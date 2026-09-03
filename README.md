@@ -1,4 +1,4 @@
-# Nyaya Setu (न्याय सेतु)
+LEGAL-Nexus
 
 > **Bridge to Justice**: An AI-native Legal Intelligence, Case Intake, and Legal Ecosystem Platform for India.
 
@@ -6,7 +6,7 @@
 
 ## 📌 Architecture Overview
 
-Nyaya Setu is architected as a modular monorepo containing:
+ LEGAL-Nexus is architected as a modular monorepo containing:
 
 - **`frontend/`**: React 19 + Tailwind CSS + Lucide Icons + Vite dashboard for Citizens, Lawyers, Law Students, and Admins.
 - **`backend/`**: Node.js + Express REST API with MongoDB (16+ Mongoose models), Redis caching & background processing queues, JWT + Role-Based Access Control (RBAC), and Audit Logging.
@@ -99,4 +99,4 @@ npm test
 ---
 
 ## 📄 License
-MIT © Nyaya Setu Contributors
+MIT © LEGAL-Nexus Contributors
