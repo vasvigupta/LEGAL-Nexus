@@ -1,4 +1,4 @@
-# Nyaya Setu - Legal Corpus Ingestion
+# LEGAL-Nexus - Legal Corpus Ingestion
 
 The `ingestion/` module is responsible for extracting, parsing, and chunking legal acts, central and state codes, High Court/Supreme Court judgments, and statutory circulars into structured MongoDB `legalSources` and `legalChunks`.
 
